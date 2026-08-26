@@ -1,0 +1,94 @@
+# Pre-commit hooks for model-regression-sentinel. lefthook is not yet a devDependency here; install
+# it once, then install the hooks:
+#
+#   pnpm add -D -w lefthook
+#   pnpm exec lefthook install
+#
+# WHAT THIS IS. Three gates that read the staged file list and refuse the commit if it carries
+# something that cannot be taken back. Ported from durable-agent-outbox, which carries the first
+# two, plus a third that closes a gap in agent-context-containment: that project has no pre-commit
+# hook at all, so its corpus drift check exists only in CI and the first anyone hears about a
+# reformatted corpus is a red X on a branch that has already been pushed.
+#
+# WHY BEFORE THE COMMIT rather than only in CI. Committing a keypair or a live API key is a one-way
+# error: rotating the secret is the only real remedy once it has been pushed, and rewriting history
+# does not un-publish it. A corpus edit is recoverable, but a corpus edit that reaches main with a
+# stale manifest means every drift verdict measured in between was measured against an instrument
+# nobody had checked.
+#
+# Emergency bypass: `git commit --no-verify`. Use it sparingly, and never for the corpus gate: the
+# whole value of a drift check is that it was not waved through.
+#
+# All three gates read only the STAGED file list, so they are fast and cannot be confused by
+# unrelated working-tree noise.
+
+pre-commit:
+  parallel: true
+  commands:
+    # A committed secret is not undone by a later commit. This is the one gate here whose failure
+    # mode is permanent, which is why it runs on every commit rather than on a path filter.
+    block-secret-files:
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR)
+        # Block any .env / .env.* (except .env.example), *.pem, id.json,
+        # wallet.json, or any *keypair*.json. Matched against repo-root-relative paths.
+        matches=$(printf '%s\n' "$staged" | grep -E '(^|/)(\.env(\.[^/]+)?$|.+\.pem$|id\.json$|wallet\.json$|[^/]*keypair[^/]*\.json$)' | grep -Ev '(^|/)\.env\.example$' || true)
+        if [ -n "$matches" ]; then
+          echo "ERROR: refusing to commit potential secret / keypair file(s):"
+          echo "$matches" | sed 's/^/  /'
+          echo
+          echo "If this is a fixture and intentional, add a .gitignore exception"
+          echo "and bypass once with: git commit --no-verify"
+          exit 1
+        fi
+
+    # CI installs with --frozen-lockfile, so a package.json committed without its lockfile update
+    # fails there rather than here. Catching it at commit time keeps the two files in one commit,
+    # which is also what makes the history bisectable.
+    lockfile-sync:
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR)
+        if ! printf '%s\n' "$staged" | grep -qE '(^|/)package\.json$'; then
+          exit 0
+        fi
+        if printf '%s\n' "$staged" | grep -qE '^pnpm-lock\.yaml$'; then
+          exit 0
+        fi
+        if git diff --name-only | grep -qE '^pnpm-lock\.yaml$'; then
+          echo "ERROR: package.json is staged but pnpm-lock.yaml has unstaged changes."
+          echo "Run: git add pnpm-lock.yaml"
+          exit 1
+        fi
+        # Lockfile is clean and unstaged. Only metadata or scripts changed. Allow.
+
+    # THE GATE THE SIBLING DOES NOT HAVE. agent-context-containment has no pre-commit hook, so a
+    # corpus edit there is only caught by CI, after a push, by which point the manifest and the
+    # corpus have already disagreed in a commit somebody may have branched from. This closes that
+    # gap at the cheapest possible point.
+    #
+    # It CHECKS and never writes, and that is the whole design. A hook that silently regenerated
+    # MANIFEST.sha256 whenever the corpus changed would make every corpus edit self-approving: the
+    # manifest would always match, the drift check would always be green, and the one signal it
+    # exists to produce - "something wrote to the corpus and nobody decided to" - would be erased
+    # by the hook before anyone could see it. Regenerating is a decision, and `pnpm write:manifest`
+    # is where a human makes it.
+    #
+    # Scoped to `^corpus/` so commits that touch nothing else pay nothing for it.
+    corpus-manifest:
+      run: |
+        staged=$(git diff --cached --name-only --diff-filter=ACMR)
+        if ! printf '%s\n' "$staged" | grep -qE '^corpus/'; then
+          exit 0
+        fi
+        if ! node scripts/write-manifest.mjs --check; then
+          echo
+          echo "ERROR: a corpus file is staged and MANIFEST.sha256 does not cover it."
+          echo
+          echo "If the corpus edit is deliberate: run pnpm write:manifest, stage the manifest in"
+          echo "the SAME commit, and record what changed and why in RESULTS.md."
+          echo
+          echo "If it is not deliberate: find out what wrote to the file before you regenerate"
+          echo "anything. A formatter is the usual culprit - check that 'corpus' is still in"
+          echo "biome.json's ignore list. See scripts/verify-corpus.sh."
+          exit 1
+        fi

@@ -1,0 +1,298 @@
+# model-regression-sentinel
+
+**Existing eval tools test the changes you made. This one watches for the change you did not make:
+a provider updating the weights behind a pinned alias, so behavior moves while your code, your
+prompt and your model string stay byte-identical.**
+
+> [!WARNING]
+> **Pre-1.0, nothing published, and the headline limitation first: this tool has never observed a
+> real provider drift event.** Every positive result in this repository comes from either a
+> synthetic perturbation of recorded outputs or a deliberate swap to a different model. Neither is
+> the thing the tool exists to catch. A drift watcher that has not yet caught drift is a detector
+> with a measured false-positive rate and an unmeasured true-positive rate in the wild, and that is
+> the honest state of it.
+>
+> **What actually runs, measured rather than remembered:**
+> - **267 tests green across 7 packages**: `pnpm test`. spec 75, report 50, watch 37, baseline 36,
+>   cli 25, run 22, detect 22.
+> - **11 calibration scenarios and 9 detector mutants, zero escapes**, with a meta-test that fails
+>   if the suite stops discriminating between them.
+> - **A/A false positive rate of 0 in 200** splits of real recorded outputs, and **93% power at a
+>   7 point drop**: `node scripts/calibrate.mjs`. Free to re-run, seeded, makes no provider call.
+> - **960 real provider calls, $1.77**, across four arms: `node scripts/run-study.mjs`.
+> - `pnpm verify:corpus` - 24 frozen cases checked byte for byte, and `shasum -a 256 -c
+>   corpus/canary/MANIFEST.sha256` checks the same thing with no code from this project involved.
+> - `pnpm verify:freeze` - **exits 1 by design.** See "not proven" below.
+>
+> **Do not use this as your only signal.** Keep whatever alerting you already have.
+
+---
+
+## What this is not
+
+**It is not a replacement for promptfoo, and it is not trying to be.** If you want to know whether
+the prompt you just edited broke something before you merge it, use promptfoo. It is better
+resourced, better documented, has a larger provider matrix and a mature CI story, and this project
+will not catch up on any of those axes.
+
+It is also not an eval framework. This repository's own parent audit rejected building one, in
+writing, and the rejection was correct:
+
+> `ai-gap-coverage-projects/README.md`, "Explicitly rejected, and why":
+> **A standalone eval framework** - "Braintrust, promptfoo and inspect already occupy this, all
+> better resourced. Building a fifth one buys a line item, not a capability."
+
+That rejection stands. The claim here is that **provider drift is a different problem**, and that the
+difference is technical rather than positional. Three things follow from it that a pre-merge eval
+tool does not have to solve, and mostly does not:
+
+1. **It is continuous, so the peeking problem is real.** A fixed-alpha test in an hourly cron fires
+   about once every twenty hours on a provider that has not changed. That is not a tuning issue, it
+   is what repeated testing does, and it needs inference valid at any stopping time.
+2. **The baseline ages.** A reference captured six weeks ago meets today's network, today's provider
+   load, today's routing. Behavioral metrics survive that. Latency does not, and this tool degrades
+   its trust rather than reporting it as though it were current.
+3. **Telling drift from noise is the entire job.** A pre-merge diff compares against a baseline
+   collected minutes ago under identical conditions, so one sample per case is often enough. Nothing
+   about that holds here.
+
+---
+
+## Prior art, before anything else
+
+The neighbours, described as they describe themselves, because a comparison table built to win is
+not evidence. The middle column is what each does **better than this project**, and it is the honest
+column: on those axes, use them.
+
+| Project | What it does better than this | Where the boundary sits |
+| --- | --- | --- |
+| **promptfoo** | Everything about pre-merge evaluation: dozens of providers, assertion types, red-teaming, caching, a web viewer, and a CI story people already run. Frozen test cases, baseline vs candidate, quality and latency and cost diffing, thresholds, non-zero exits, and HTML reports all ship today. | It answers *did the change I just made break something?* The baseline is a run you took deliberately, minutes ago, under conditions you controlled. It is not built to be run forever against an unchanged codebase, and a raw diff run on a schedule inherits the peeking problem. |
+| **Braintrust** | A hosted platform: experiment tracking, dataset management, human review, online scoring, a real UI, and a team workflow. Vastly more product than one repository. | Its comparison is between experiments you ran. Watching a pinned alias for a change nobody initiated is not the frame, and the statistical question of whether a delta exceeds run-to-run nondeterminism is left to the reader. |
+| **LangSmith** | Tracing and observability of live applications, which this project does not do at all, plus datasets and evaluators integrated with a framework people already use. | It sees production traffic, which is far richer than any probe set. Production traffic also changes on its own, so a shift in it cannot be attributed to the provider without a fixed corpus to hold everything else still. |
+| **Langfuse** | Open-source tracing, cost and latency analytics, prompt management and versioning, self-hostable, generous free tier. Its cost and latency accounting is more complete than this project's. | It measures what your traffic did. Attributing a change to the provider rather than to your traffic requires an experiment, and that is a different instrument. |
+| **DeepEval** | A large library of ready-made metrics, including LLM-as-judge ones, with pytest integration that developers adopt immediately. | Its most flexible metrics are model-graded. **An LLM judge is itself a drifting instrument**, so a model-graded metric cannot separate a change in the thing being measured from a change in the thing measuring it. That trade is right for evaluating quality and wrong for detecting drift. |
+
+Every one of them answers *did the thing I changed break something?* None of them answers **did the
+provider change something I did not, and is that difference larger than this provider's own
+run-to-run noise?**
+
+**Keep running promptfoo.** Run this beside it, on a schedule, against a pinned alias.
+
+### The contribution here is four things, and none of them is the idea
+
+Provider drift is not a novel observation; anyone who has pinned an alias has wondered about it.
+
+1. **A detector with a measured error rate**, rather than a diff with a threshold. Two nulls, one
+   from permutation and one calibrated from the provider's own A/A behavior, and a finding must
+   clear both.
+2. **A minimum detectable effect that is computed and reported**, so a null result carries the size
+   of the effect it could have seen. When the effect is below it, the verdict is `INCONCLUSIVE` and
+   never `NO_DRIFT`.
+3. **Always-valid inference for the continuous mode**, so a watcher running forever does not
+   manufacture alarms by looking often.
+4. **Eight detector mutants and a discrimination meta-test**, because a drift detector that never
+   fires passes every honesty property anyone would think to write.
+
+---
+
+## The wedge, concretely
+
+A pinned alias resolves to something, and what it resolves to is a fact you can observe. Measured on
+this machine while building this:
+
+| requested | served identity | canonical | context window | max output |
+|---|---|---|---|---|
+| `sonnet` | `claude-sonnet-5` | `claude-sonnet-5` | 1,000,000 | 64,000 |
+| `haiku` | **`claude-haiku-4-5-20251001`** | `claude-haiku-4-5` | 200,000 | not reported |
+
+The `haiku` alias exposes a dated snapshot. The `sonnet` alias does not. **Alias-resolution
+granularity is provider- and model-dependent**, so a tool that assumes a dated id exists will report
+"no identity change" for a provider that never had one to show. That is why identity is hashed as a
+fingerprint over everything the provider does disclose, why undisclosed fields are named in the
+report, and why an identity change is reported as a fact with no p-value attached rather than as a
+statistical finding.
+
+It is also why identity alone is not enough, and the statistics have to exist: a vendor can change
+weights without changing a string, and can change a string without changing weights.
+
+---
+
+## Quickstart
+
+```bash
+pnpm install
+pnpm build
+
+# 1. What is frozen, and does it still match its manifest.
+pnpm exec sentinel corpus
+pnpm verify:corpus
+
+# 2. Collect. Prints a cost estimate from a measured pilot rate; does nothing without --yes.
+node scripts/run-study.mjs --replicates 10
+node scripts/run-study.mjs --replicates 10 --yes            # about $0.93 for three arms
+
+# 3. Compare. Exit 0 unless a regression is CONFIRMED on an independent second run.
+pnpm exec sentinel compare \
+  --baseline results/runs/baseline.json \
+  --candidate results/runs/candidate.json \
+  --confirm results/runs/confirmation.json
+
+# 4. Measure the detector's own error rates on those recorded outputs. Free, makes no call.
+node scripts/calibrate.mjs
+
+# 5. Watch. Initialise once, then one tick per invocation. Your scheduler owns the schedule.
+pnpm exec sentinel watch --init --baseline results/runs/baseline.json
+pnpm exec sentinel watch --tick
+pnpm exec sentinel schedule --every 60                      # cron, launchd and Actions wiring
+```
+
+Exit codes, which are the actual product: **0** nothing confirmed, including a suspected finding;
+**1** a confirmed regression that reproduced on an independent arm; **2** the tool could not do its
+job. The last is deliberately not 1, because "I could not look" and "it got worse" are opposite
+claims and a pipeline that conflates them will eventually treat an outage as a passing build.
+
+---
+
+## Where the cases come from
+
+Drawn from the sibling projects in this directory rather than invented, because a corpus of made-up
+prompts measures a made-up thing. 24 cases, `corpus/canary` (8) and `corpus/extended` (16).
+
+- **`durable-agent-outbox`** contributes decisions with genuine ground truth about exactly-once
+  external side effects: a tool call returned `UNKNOWN`, retry or hold; a withdrawal arrived while
+  the outcome was in doubt, apply it or record it; `UNKNOWN` plus a withdrawal plus a receipt saying
+  it landed, which terminal status. That last one is the sibling's headline scenario, where **five
+  of six frontier-model trials on the originating benchmark gave the wrong answer.**
+- **`agent-context-containment`** contributes containment decisions, and the most valuable thing it
+  contributes is a **pair**: `cnt-c-001` and `cnt-c-002` carry **byte-identical hostile page
+  content** and have opposite correct answers, decided only by which capability the bytes reach.
+  That makes them a joint tripwire no one-sided drift can satisfy. A model growing more cautious
+  flips one; a model growing more compliant flips the other.
+
+The corpus spans four archetypes because they are four different noise regimes, not four samples of
+one. Measured here: latency CV of 7.5 percent on a constrained one-word answer against 70.8 percent
+on a free-form sentence.
+
+---
+
+## The method, and why a diff is not enough
+
+Full treatment with every assumption stated: [docs/STATISTICS.md](docs/STATISTICS.md).
+
+In brief. The unit of analysis is the **case**, not the replicate, because case difficulty is a huge
+nuisance factor and pairing removes it. The primary test is a **paired sign-flip permutation test**,
+exact by enumeration up to 20 cases. Beside it sits a **null calibrated from the baseline's own
+A/A behavior**, which measures what this provider does on its own rather than assuming a binomial
+model. A finding must clear both. Effect sizes carry seeded bootstrap intervals. Per-case screening
+uses **Benjamini-Hochberg at q = 0.10** and is labelled triage, because at ten replicates a
+per-case Fisher exact test cannot reach significance except at total collapse.
+
+**Latency never gates CI.** In a pilot of eight replicates on one free-form case, one sample was
+3.57 times the median. A build that fails for that reason is a build whose failures nobody can act
+on, and the second time it happens the gate gets removed.
+
+**The watcher uses an e-process, not a scheduled t-test.** Ville's inequality bounds the probability
+that wealth ever crosses `1/alpha`, at any stopping time, so looking often carries no penalty.
+
+**Nothing fails a build without confirmation.** A single crossing is `SUSPECTED_DRIFT` and exits 0. It
+becomes `CONFIRMED_DRIFT` only when it reproduces on an independently collected run.
+
+---
+
+## What is real vs what is scaffolding
+
+**Real, pinned by tests that can fail.** The frozen corpus and its byte-level manifest, checkable
+with `shasum` and no code from this project. The corpus validator, with a negative control per
+violation code. The freeze-record validator, which the sibling this discipline came from does not
+have. The canonical JSON writer, including its refusal to serialize `undefined` or `NaN` where
+`JSON.stringify` would silently drop or coerce them. The statistics, with exact Fisher and exact
+Mann-Whitney checked against closed-form values and the arrangement counts asserted against binomial
+coefficients. The purity gate that fails the build if the detector grows a clock, a network call or
+a bare `Math.random`. **Ten calibration scenarios and eight detector mutants with a discrimination
+meta-test**, which is what converts "the scenarios passed" from a statement about the scenarios into
+a statement about the detector.
+
+**Heuristics in more confident clothes.** The refusal detector is a lexicon of English openers
+anchored at sentence starts; a model that declines in a form not on the list is scored as having
+answered. The JSON Schema checker implements a documented subset and **reports the keywords it does
+not implement** rather than ignoring them, but a case relying on `allOf` would be validated more
+loosely than its author intended. The synthetic runs used in calibration draw from Bernoulli and
+log-normal families fitted to the pilot; real provider nondeterminism has structure no parametric
+family captures, so a false-positive rate measured against synthetic data is a lower bound on the
+real one.
+
+**Scaffolding.** The BYOK HTTP providers for the Anthropic Messages API and any OpenAI-compatible
+endpoint are **shipped and unrun**: there is no API key in the environment that produced this
+repository, so they are written, typechecked and exercised against a fake transport, and no number
+here came from either. Every measured number came through an authenticated local `claude` CLI, which
+injects its own context and whose cost is therefore reported as an upper bound beside a computed
+bare-API lower bound.
+
+**Not proven, and stated as not proven.** That the corpus was authored before the detector existed.
+The sibling's lesson is that authoring order leaves no trace and commit order does, and **no git
+operation was permitted in the environment that produced this repository**, so the freeze is
+recorded as `UNAVAILABLE` rather than pending. `pnpm verify:freeze` exits 1 by design and
+`corpus/*/FREEZE.json` carries the four commands a human would run. And, most importantly: **that
+this tool detects real provider drift.** It has never seen any.
+
+---
+
+## Honest failures
+
+Recorded because they are the most useful thing in the repository.
+
+**The refusal detector scored a correct answer as a refusal.** The rule ported from the sibling was
+positional: a marker within the first 120 characters counts. A real one-sentence answer to a real
+case in this corpus reads "The main risk is that retrying can double-charge the customer, and I
+cannot rule that out from the timeout alone" - which contains "I cannot" at character 66 and is an
+answer. The consequence would have been worse than one mis-scored case: the refusal rate would climb
+whenever a model became more careful in prose, and **this project would have reported that as
+provider drift.** The rule now requires a sentence boundary. The sibling's domain never surfaced it
+because its replies were single words.
+
+**The peeking mutant escaped its own scenario.** `peeks` exists to demonstrate the problem this
+project is organised around, and at the first scale tried it alarmed 3 of 20 watches against a
+threshold of 3, so it passed. The scenario was too small to resolve the effect it was written to
+show. At 40 watches of 1000 null rounds the separation is 1/40 for the e-process against 15/40 for
+the peeking test, and the scenario now also asserts the property directly: doubling the length of the
+watch does not increase the false alarm rate.
+
+**Canonical JSON quietly agreed with `JSON.stringify`.** The module header argued that an undefined
+property must throw, because `{a:1}` and `{a:1,b:undefined}` produce the same string and a digest
+could never tell them apart. The code filtered undefined out, doing exactly what it criticised. A
+test caught the contradiction between the prose and the behavior.
+
+**Two corpus cases had attribution too thin to audit.** A test requiring derived cases to say what
+was changed, in more than a token, failed on two entries reading "Narrowed to the decision only."
+and "Restated as a question."
+
+**The JSON report threw on every real comparison, and it was my own fix that broke it.** Adding a
+power analysis for continuous metrics meant setting `allPassCeiling` to NaN, because there is no
+"all passed" to bound on a token count. Canonical JSON deliberately refuses to serialize NaN, for
+the good reason that `JSON.stringify` would silently write `null` and two different objects would
+hash the same. So `sentinel compare --format json` died with `NaN has no JSON representation` the
+moment it reached `outputTokens`, which is always. Two correct decisions met and produced a broken
+command, and only a test that ran the actual binary against the actual recorded runs found it.
+
+**Nine defects in total were found during this pass and are listed with their consequences in
+[RESULTS.md](RESULTS.md).** Four of them were found by tests written after the code, three by
+reviewers reading it, and two by running the thing end to end on real data. None was found by
+re-reading the source.
+
+---
+
+## Documentation
+
+| Document | What is in it |
+|---|---|
+| [docs/STATISTICS.md](docs/STATISTICS.md) | Every method, every assumption, and what each rejected alternative would have cost |
+| [RESULTS.md](RESULTS.md) | The verification record: what was run, on what, with what output, including nine defects found during the pass |
+| [results/CALIBRATION.md](results/CALIBRATION.md) | The detector's measured false-positive rate and power curve. Generated, never typed |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | What this cannot do, ordered by how much it should change your reading |
+| [docs/PROVIDERS.md](docs/PROVIDERS.md) | The five adapters, which were run, and what the harness overhead costs |
+| [docs/FREEZE.md](docs/FREEZE.md) | The two freeze mechanisms, and the proof this repository cannot give |
+| [corpus/canary/FREEZE.json](corpus/canary/FREEZE.json) | The freeze claim and the recipe for a repository that can cash it |
+
+## Licence
+
+MIT.

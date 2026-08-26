@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "split": "canary",
+  "caseCount": 8,
+  "frozenAt": "2026-08-26",
+  "frozenAtCommit": null,
+  "state": "unavailable",
+  "whatIsProven": "The 8 canary cases have not changed since MANIFEST.sha256 was recorded. Their bytes are covered by that manifest, `pnpm verify:corpus` checks it, and `shasum -a 256 -c corpus/canary/MANIFEST.sha256` checks it with no tool from this project involved.",
+  "whatIsNotProven": "That the corpus was authored before the detector existed. That is a claim about ORDERING, and only a git object can carry it. Nothing here establishes it and nothing here should be read as establishing it.",
+  "reason": "No git operation was permitted in the environment that produced this repository, so the sibling's recipe - commit the corpus with no detector in the tree, record that sha, then write the detector - could not be executed. This is UNAVAILABLE, not pending: it is not work that remains to be done here, it is a proof this environment cannot produce. The sibling agent-context-containment records the same claim failing for a different reason, at corpus/holdout/FREEZE.json, where a commit was recorded and rejected because the engine was already present in that tree.",
+  "howToCashInAFutureRepository": [
+    "1. Author the corpus and the spec it is written against.",
+    "2. Commit them, with no detector in the tree.",
+    "3. Record that sha and tag it, BEFORE writing packages/detect.",
+    "4. Verify - this must exit NON-ZERO: git cat-file -e <sha>:packages/detect/src/compare.ts"
+  ],
+  "doNot": "Do not weaken scripts/verify-freeze.sh to make this pass, and do not record a commit that does not satisfy it. A freeze check that can be talked into agreeing is worth less than no freeze check, because it looks like evidence. Do not soften `unavailable` to `pending`: they are different claims and checkFreeze rejects a record whose state and commit disagree."
+}

@@ -1,0 +1,45 @@
+{
+  "name": "model-regression-sentinel-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Provider drift detection: watch a pinned model alias for behavior that moved when your code did not, and tell drift apart from sampling noise.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix --unsafe .",
+    "format": "biome format --write .",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "changeset": "changeset",
+    "release": "changeset publish",
+    "write:manifest": "node scripts/write-manifest.mjs",
+    "verify:corpus": "bash scripts/verify-corpus.sh",
+    "verify:freeze": "bash scripts/verify-freeze.sh",
+    "record:freeze": "bash scripts/record-freeze.sh",
+    "study:collect": "node scripts/run-study.mjs",
+    "study:calibrate": "node scripts/calibrate.mjs",
+    "audit:release": "bash scripts/audit-release.sh",
+    "examples": "turbo run build && tsx examples/detectorHonesty.ts && tsx examples/driftReport.ts",
+    "hooks:install": "lefthook install"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.27.9",
+    "@model-regression-sentinel/cli": "workspace:*",
+    "@types/node": "^20.16.13",
+    "lefthook": "^1.8.2",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.2",
+    "turbo": "^2.2.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

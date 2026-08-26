@@ -1,0 +1,13 @@
+packages:
+  - "packages/*"
+  # examples is a workspace member so it can resolve @model-regression-sentinel/* by name, which is
+  # the line a consumer actually writes. Without it the only way to make an example run is a
+  # relative import into src/, which demonstrates the wrong thing and bypasses the built entry
+  # point the package.json `exports` map defines. It stays `private` so it is never published.
+  - "examples"
+
+# Refuse to install any package version published less than 7 days ago (10080 minutes).
+# This neutralizes near-real-time worm propagation, which has spread end-to-end in under
+# 30 minutes. If you genuinely need a fresh release, drop this to 0 for one install and
+# put it straight back.
+minimumReleaseAge: 10080

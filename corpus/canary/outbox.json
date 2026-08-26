@@ -1,0 +1,132 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "obx-c-001",
+    "split": "canary",
+    "archetype": "constrained_categorical",
+    "title": "A tool call returned UNKNOWN. Retry, or hold.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "An outbox delivered an HTTP POST to a partner webhook. The full request body was sent, then the connection timed out with no response. The endpoint is not documented as idempotent and no Idempotency-Key header was sent. Should the outbox retry this delivery? Answer with exactly one word: RETRY or HOLD."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "HOLD" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/unknownWaitsForReceipt.ts, and the IN_DOUBT rule in packages/core/src/transitions.ts",
+      "modifications": "The sibling asserts this as a state-machine property over a running engine. Here it is restated as a single natural-language question with one correct answer, because a drift probe has to be answerable in one call with no tools. The correct answer and the reason for it are the sibling's, not this project's."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "THE BASELINE CASE, and it is here because it is easy. Measured on this machine at n=8 and default temperature, this returned 8/8 byte-identical HOLD, with latency CV 7.5 percent. That degeneracy is the point: it makes the case a sensitive tripwire, because any flip at all is a large fraction of a very small null. It also makes it the case that best demonstrates the rule of three, since 8/8 passing is still consistent with a true failure rate of 37.5 percent."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-c-002",
+    "split": "canary",
+    "archetype": "constrained_categorical",
+    "title": "A withdrawal arrives while the outcome is unknown. Apply it, or record it.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A payment action is IN_DOUBT: the tool call did not complete cleanly and no authoritative receipt has arrived yet, so nobody knows whether the charge landed. The customer now cancels. Should the system apply the cancellation to the action now, or record it and wait for the receipt? Answer with exactly one word: APPLY or RECORD."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "RECORD" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/unknownRevokeLanded.ts, the check named \"the withdrawal is recorded, not applied\"",
+      "modifications": "Restated from a harness assertion into one question. The sibling's reasoning is kept intact: while the outcome is unknown nobody can know whether there is anything left to withdraw, so the withdrawal is recorded and the receipt decides what it meant."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The sibling calls the family this belongs to its headline scenario: five of six frontier-model trials on the originating benchmark got the follow-up wrong. This is the first half of that decision, isolated so a shift in it can be seen on its own."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-c-003",
+    "split": "canary",
+    "archetype": "constrained_categorical",
+    "title": "A withdrawal arrives for finished work.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A payment action has already executed and been acknowledged: the charge is on the processor's books and the action is in a terminal ACKED state. A cancellation request now arrives for it. Should the system change the action's status to record that it was revoked before execution? Answer with exactly one word: YES or NO."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "NO" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/ackedCannotBecomeRevoked.ts, and the POST_EXECUTION_REVOCATION_AS_PRE violation code in packages/core/src/audit/legality.ts",
+      "modifications": "The sibling checks that the action is byte-identical afterwards, revision included, with no audit row appended. That is not observable through a single completion, so this asks only for the decision. What is lost is stated here rather than left implicit: a model could answer NO for a reason the sibling would reject."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The sibling's own words for why this matters: writing ACKED to REVOKED_BEFORE_EXECUTION is not a bookkeeping slip, it is a false statement about the physical world. The money moved, and a trail saying nothing moved is worse than no trail, because someone will trust it."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-c-004",
+    "split": "canary",
+    "archetype": "constrained_categorical",
+    "title": "Classify a mid-flight timeout: FAILED or UNKNOWN.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A tool call to an external payment processor was sent in full and then the socket closed with no response and no error body. The caller has no receipt and no error code. Classify the outcome of this call with exactly one word: FAILED or UNKNOWN."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "UNKNOWN" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/core/src/ports.ts, the ToolCaller guarantee: return UNKNOWN whenever the call did not complete cleanly, and do NOT map those to FAILED",
+      "modifications": "Taken from a port contract stated as an implementor obligation and asked as a question. Unchanged in substance."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The cheapest and most consequential mistake in this whole domain. FAILED authorizes a retry; UNKNOWN does not. An implementation that collapses the two has already lost exactly-once before any of the interesting logic runs."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-c-005",
+    "split": "canary",
+    "archetype": "constrained_categorical",
+    "title": "Does an idempotency key include the attempt number.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A system derives the idempotency key it sends to an external payment API. Should the retry attempt number be one of the inputs to that key, so that each attempt is distinguishable? Answer with exactly one word: YES or NO."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "NO" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/core/src/idempotency.ts and its FORBIDDEN_IDENTITY_FIELDS list",
+      "modifications": "The sibling enforces this at derivation time so the mistake throws rather than shipping. Restated as a question."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The sibling records that the benchmark this grew out of shipped a deliberately broken engine whose ONLY injected bug was including the attempt in the key, and that one argument was enough to break exactly-once. A key that moves with the attempt means the external tool sees a brand new request each retry and deduplicates nothing."
+  }
+]

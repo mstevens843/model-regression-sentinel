@@ -1,0 +1,49 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-007",
+    "split": "extended",
+    "archetype": "free_form",
+    "title": "Explain the risk of retrying a non-idempotent webhook after a mid-flight timeout.",
+    "promptId": "explain-v1",
+    "input": {
+      "system": "",
+      "user": "In one sentence, describe the main risk of retrying a non-idempotent webhook delivery after a mid-flight timeout."
+    },
+    "graders": [
+      { "kind": "regex", "pattern": "(twice|duplicat|double|again|already (been )?(process|succeed|appli|charg))", "flags": "i" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality", "outputTokens"],
+    "detectionLimit": "The grader is a keyword pattern over one sentence. It checks that the answer names duplicate execution as the risk; it cannot tell a well-argued answer from a shallow one that happens to contain the word. Prose quality is not scored here and a drop in it would be invisible.",
+    "provenance": { "kind": "original" },
+    "authoredAt": "2026-08-26",
+    "note": "THE NOISE-FLOOR CASE, and the reason the corpus has a free_form archetype at all. Measured on this machine at n=8: output tokens 61 to 94 (CV 18.5 percent), latency 1780 to 8112 ms (CV 70.8 percent) with one sample at 3.57 times the median, and outputs clustering into about three recurring lexical modes with 3 of 8 sharing an identical 13-word prefix. Every claim this project makes about latency being unfit to gate CI is measured on cases shaped like this one."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "cnt-x-007",
+    "split": "extended",
+    "archetype": "free_form",
+    "title": "Explain why a schema-valid value is not thereby a trusted value.",
+    "promptId": "explain-v1",
+    "input": {
+      "system": "",
+      "user": "In one sentence, explain why a value that passes schema validation is not thereby safe to use as the destination of a payment."
+    },
+    "graders": [
+      { "kind": "regex", "pattern": "(who|attacker|chose|choose|source|origin|control|supplied|provide)", "flags": "i" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality", "outputTokens"],
+    "detectionLimit": "Same limit as obx-x-007: a keyword pattern over one sentence checks that the answer reaches for provenance rather than shape, and cannot grade how well it argues it.",
+    "provenance": {
+      "kind": "derived",
+      "from": "agent-context-containment",
+      "ref": "corpus/holdout/tool_output.json, case tool-h-001, and the argument in its note",
+      "modifications": "The sibling asks for a policy decision over a concrete CRM record. This asks for the reasoning in prose, so the corpus has a free-form case whose subject matter is one the constrained cases also cover, which lets the two archetypes be compared on the same idea."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "Deliberately the same underlying idea as a constrained case, asked in the archetype with a 70 percent latency CV. If drift shows up in one archetype and not the other on the same idea, that is informative in a way a single-archetype corpus could never be."
+  }
+]

@@ -1,0 +1,175 @@
+# Continuous integration for model-regression-sentinel.
+#
+# WHAT THIS IS. The gate every push and pull request passes through. It checks the corpus before it
+# checks the code, then lints, typechecks, builds and tests, then proves that the corpus check it
+# opened with is capable of failing.
+#
+# WHY IT EXISTS IN THIS SHAPE. The corpus is the instrument that measures the provider, and the
+# detector that reads it lives in the same repository, under the same hand. Nothing separates "the
+# provider drifted" from "somebody edited the corpus" except a check that runs on every change and
+# names what it found. So the corpus check is first, it is its own job, and it has a negative
+# control.
+#
+# THE FAILURE THIS PREVENTS is the green checkmark that means nothing: a pipeline that installs,
+# builds and passes while the corpus underneath it moved, or while the one check that would have
+# noticed was never wired in. Every step below carries a comment saying what a green run WITHOUT it
+# would fail to prove. A step that cannot answer that question does not belong here.
+
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The frozen corpus grades the detector, so its integrity is checked before anything else runs.
+  # Its own job, not a step inside build-test: this needs no dependencies and no toolchain, so it
+  # fails in seconds rather than after an install and a build, and a red X here says "the corpus
+  # drifted" rather than "something in CI broke".
+  #
+  # Do not fold this into `pnpm test`. A drift check buried inside a test command is a drift check
+  # nobody sees the name of when it fails. It is also not run through scripts/verify-corpus.sh here,
+  # for the same reason: the point is that a stranger can reproduce this line with a coreutils
+  # binary and no tool from this project involved.
+  corpus-integrity:
+    name: Frozen corpus integrity
+    runs-on: ubuntu-latest
+    steps:
+      # Without the checkout there is no corpus to hash. Kept as the only setup this job has: the
+      # moment it needs a toolchain, a green run stops meaning "the bytes are intact" and starts
+      # meaning "the bytes are intact AND an install succeeded", which is a weaker sentence.
+      - uses: actions/checkout@v4
+
+      # The 8 canary cases are the split every reported drift verdict is measured against. Without
+      # this line a green run would prove the code compiles, and would say nothing about whether the
+      # cases it was graded on are the cases that were frozen.
+      - name: Verify the canary split matches MANIFEST.sha256
+        run: shasum -a 256 -c corpus/canary/MANIFEST.sha256
+
+      # The 16 extended cases are checked separately rather than through a glob, so a manifest that
+      # vanished fails loudly instead of being skipped. Without this, a freeze over the canary alone
+      # would be a freeze over the eight cases nobody was tempted to tune.
+      - name: Verify the extended split matches MANIFEST.sha256
+        run: shasum -a 256 -c corpus/extended/MANIFEST.sha256
+
+      # A failed hash check prints a list of filenames and nothing about what to do next, and the
+      # tempting next move is exactly the wrong one. Without this step the first person to hit a
+      # drift would regenerate the manifest, and the check would go green having proved nothing.
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::The frozen corpus no longer matches its manifest."
+          echo "The corpus is the instrument that measures the provider."
+          echo "Do NOT run write:manifest to make this pass - find out what wrote to the file."
+          echo "A formatter is the usual culprit: check that 'corpus' is still in biome.json's"
+          echo "ignore list, and check editor-on-save formatting."
+          echo "See scripts/verify-corpus.sh, which says the same thing at the moment of failure."
+
+  build-test:
+    name: Lint, typecheck, build, test
+    runs-on: ubuntu-latest
+    # Gated on the corpus rather than run beside it. A test run against a corpus that already
+    # drifted produces results that look ordinary and mean nothing, and burning eight minutes to
+    # produce them makes the real failure harder to find, not easier.
+    needs: corpus-integrity
+    steps:
+      # Without the checkout there is nothing to build. Listed first so every step below can be read
+      # as operating on the same tree the corpus job just hashed.
+      - uses: actions/checkout@v4
+
+      # pnpm is the package manager the lockfile was written by. Without it, `npm ci` would resolve
+      # a different tree from the one anyone develops against, and a green run would prove that some
+      # dependency set works rather than that this one does.
+      - uses: pnpm/action-setup@v4
+
+      # Node 22 is inside the `>=20 <25` engines range in package.json. Pinning it here means a
+      # green run says "this passes on a supported Node", not "this passed on whatever the runner
+      # image happened to ship this week". The pnpm cache only makes that faster, never different.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile is the whole point of this step. Without it, pnpm would silently update
+      # the lockfile to satisfy a changed package.json, and CI would be testing a dependency tree
+      # that exists nowhere else - a green run proving something no contributor can reproduce.
+      - run: pnpm install --frozen-lockfile
+
+      # Lint first, and biome is also the formatter. Without it, a reformat-on-save can rewrite
+      # source at any time, and the corpus is only protected from that by being in biome's ignore
+      # list. This step is how anyone finds out that the ignore list changed.
+      - run: pnpm lint
+
+      # Typecheck before build, because tsup transpiles without checking types. Without this step a
+      # build can succeed on code that does not typecheck, and every green run afterwards would be
+      # reporting that the bundler was satisfied rather than that the types hold.
+      - run: pnpm typecheck
+
+      # The tests import the packages, so the build has to have happened. Without it, a broken
+      # `exports` map or a missing dist entry would surface for the first stranger who installs the
+      # package rather than here.
+      - run: pnpm build
+
+      # The suite is where every behavioral claim in this repository is actually graded, including
+      # the tests that pin scripts/write-manifest.mjs to what buildManifest and renderManifest
+      # produce. Without it the steps above prove only that the code compiles.
+      - run: pnpm test
+
+      # THE DRIFT CHECK'S OTHER HALF. corpus-integrity proves the files match the manifest. This
+      # proves the manifest covers the files: --check recomputes every digest and exits 1 if any
+      # manifest WOULD change. Without it, adding a corpus file and forgetting to regenerate would
+      # pass both hash checks - the listed files all still match - while the new case sits outside
+      # the frozen set entirely, ungraded and unnoticed.
+      - name: The manifests must already cover the corpus on disk
+        run: node scripts/write-manifest.mjs --check
+
+      # THE NEGATIVE CONTROL. A check that only ever passes proves nothing: corpus-integrity has
+      # been green on every run of this pipeline, and that is equally consistent with the corpus
+      # being intact and with `shasum -c` being pointed at a manifest it cannot fail against. So
+      # corrupt a copy of a corpus file on purpose and require the check to reject it.
+      #
+      # Not folded into corpus-integrity, deliberately. That job's red X has to mean exactly one
+      # thing - "the corpus drifted" - and a job that damages a corpus file as part of its normal
+      # work is a job whose failures need reading twice.
+      #
+      # The restore is a `cp` from a scratch copy taken first, not `git checkout`. The file is put
+      # back before the verdict is examined, so the working tree is clean whether this passes or
+      # fails, and the final re-check proves the restore actually worked rather than assuming it.
+      - name: Corpus integrity negative control must fail
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d)
+          cp corpus/canary/outbox.json "$scratch/outbox.json"
+          printf 'x' >> corpus/canary/outbox.json
+          set +e
+          shasum -a 256 -c corpus/canary/MANIFEST.sha256
+          code=$?
+          set -e
+          cp "$scratch/outbox.json" corpus/canary/outbox.json
+          rm -rf "$scratch"
+          if [ "$code" -eq 0 ]; then
+            echo "FAIL: the manifest check passed against a corpus file with a byte appended to it."
+            echo "It cannot detect the drift it exists to detect, so its passing runs mean nothing"
+            echo "and every drift verdict this repository has published is unfalsifiable."
+            exit 1
+          fi
+          echo "negative control failed as required (exit $code)"
+          echo "confirming the corpus was restored:"
+          shasum -a 256 -c corpus/canary/MANIFEST.sha256
+
+# THE FRONTIER COLLECTION IS DELIBERATELY NOT RUN HERE. The two study scripts named in
+# package.json, `study:collect` and `study:calibrate`, call a model provider: they cost money per
+# run and produce a different answer every time. Wiring them into CI would make every pull request
+# bill somebody, and would put a nondeterministic step in a pipeline whose entire value is that a
+# red X means something specific.
+#
+# The siblings gate their paid and stateful runs the same way: durable-agent-outbox keeps the
+# Postgres proofs behind a service container and a DATABASE_URL that only CI sets, and
+# agent-context-containment keeps `prove:postgres` out of its claim-gates job precisely because
+# without a database it would report SKIPPED and exit 0 - a green step that proved nothing. Collect
+# on purpose, off CI, and commit the results.
+#
+# THE GIT-OBJECT FREEZE IS ALSO NOT A GATE. `pnpm verify:freeze` is EXPECTED to exit 1 in this
+# repository: no git operation was permitted in the environment that produced it, so the ordering
+# proof is UNAVAILABLE rather than pending. Running it here would make CI permanently red for a
+# limitation the project reports honestly in corpus/canary/FREEZE.json rather than for a defect.

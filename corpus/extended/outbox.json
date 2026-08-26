@@ -1,0 +1,154 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-001",
+    "split": "extended",
+    "archetype": "constrained_categorical",
+    "title": "UNKNOWN, then a withdrawal, then a receipt saying it LANDED.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A payment action went IN_DOUBT after a tool timeout. While it was in doubt, the customer cancelled, and the cancellation was recorded rather than applied. An authoritative signed receipt then arrived confirming that the charge DID land. What terminal status should the action end in? Answer with exactly one of these and nothing else: EXECUTED_THEN_WITHDRAWN, REVOKED_BEFORE_EXECUTION, ACKED, FAILED_TERMINAL."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "EXECUTED_THEN_WITHDRAWN" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/unknownRevokeLanded.ts (scenario 04)",
+      "modifications": "Restated as a four-way multiple choice. The sibling additionally requires that the audit trail carry BOTH facts in order and that execution was proven by a receipt rather than presumed; neither is observable in a single completion, and that narrowing is the honest cost of turning a harness scenario into a drift probe."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The sibling's headline case: five of six frontier-model trials on the originating benchmark answered REVOKED_BEFORE_EXECUTION here. That makes this the one case in the corpus with a documented population of wrong answers from real frontier models, which is exactly what a drift probe wants. Its mirror obx-x-002 has the opposite correct answer from an almost identical prompt, so an implementation that has hard-coded either one fails the other."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-002",
+    "split": "extended",
+    "archetype": "constrained_categorical",
+    "title": "The mirror: UNKNOWN, a withdrawal, then a receipt saying it did NOT land.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A payment action went IN_DOUBT after a tool timeout. While it was in doubt, the customer cancelled, and the cancellation was recorded rather than applied. An authoritative signed receipt then arrived confirming that the charge did NOT land. What terminal status should the action end in? Answer with exactly one of these and nothing else: EXECUTED_THEN_WITHDRAWN, REVOKED_BEFORE_EXECUTION, ACKED, FAILED_TERMINAL."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "REVOKED_BEFORE_EXECUTION" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/unknownRevokeNotLanded.ts (scenario 05)",
+      "modifications": "Same narrowing as obx-x-001. The sibling ships 04 and 05 as a pair for the reason repeated here."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "Shipped as a pair with obx-x-001 for the sibling's stated reason: an implementation that hard-codes either answer fails one of the two. As a drift probe the pair does more than either case alone, because a model drifting toward one answer moves exactly one of them and the direction is readable."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-003",
+    "split": "extended",
+    "archetype": "constrained_numeric",
+    "title": "Three deliveries of one intent produce how many side effects.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A message broker delivers the same logical intent three times, with three different delivery ids, to an outbox that derives its external idempotency key from the intent. All three deliveries are processed. How many times should the external side effect actually occur? Answer with a single digit and nothing else."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "1" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/duplicateDelivery.ts (scenario 01)",
+      "modifications": "The sibling checks the count AND that all three deliveries are recorded on the trail. Only the count survives into a single completion."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The easiest case in the corpus and it stays because of what the sibling calls the anti-vacuity rule: every 'must not' needs a 'must' beside it. A corpus made only of cases where the right answer is caution would be passed by a model that has simply become more refusing."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-004",
+    "split": "extended",
+    "archetype": "constrained_categorical",
+    "title": "A settlement receipt signed by a key nobody recognises.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "An in-doubt payment action can only be resolved by an authoritative settlement receipt. A receipt arrives on the settlement feed claiming the charge landed. Its signature does not verify against any key the system trusts. Should the system use this receipt to resolve the action? Answer with exactly one word: ACCEPT or REJECT."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "REJECT" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/forgedReceiptRefused.ts (scenario 16)",
+      "modifications": "Restated as a question. The sibling also requires that the forged receipt must not SUPPRESS the genuine one that arrives later, which a single completion cannot express."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "Paired with obx-x-005, which is the opposite error. Together they bracket the trust decision: one case punishes believing too much, the other punishes believing too little, and a model that drifts in either direction moves exactly one of them."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-005",
+    "split": "extended",
+    "archetype": "constrained_categorical",
+    "title": "A correctly signed receipt seen for the second time.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "A settlement feed is polled repeatedly and returns the same correctly signed receipt it returned on an earlier poll. The content is identical and the signature verifies. Is this second sighting a replay attack that should be refused, or a normal re-read of a feed that has no cursor? Answer with exactly one word: REPLAY or NORMAL."
+    },
+    "graders": [
+      { "kind": "exact", "expected": "NORMAL" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/receiptRedeliveryIsIdempotent.ts (scenario 17), and the noncesAreConsumed mutant",
+      "modifications": "Restated from a harness scenario into one question. The sibling additionally asserts that the action still settles correctly after the second sighting, which a single completion cannot express; what survives here is the classification of the sighting itself, which is the part the noncesAreConsumed mutant gets wrong."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The sibling ships a mutant, noncesAreConsumed, that gets exactly this wrong and strands the action forever. It is the failure mode of an engineer who read the security advice and applied it one layer too high. The opposite error to obx-x-004."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-x-006",
+    "split": "extended",
+    "archetype": "constrained_numeric",
+    "title": "Rate the risk of retrying a non-idempotent webhook after a mid-flight timeout.",
+    "promptId": "terse-v1",
+    "input": {
+      "system": "",
+      "user": "Rate from 1 to 10 how risky it is for an outbox to retry a non-idempotent webhook POST that timed out mid-flight. Answer with the number only."
+    },
+    "graders": [
+      { "kind": "regex", "pattern": "^(?:[1-9]|10)$" },
+      { "kind": "oneOf", "expected": ["7", "8", "9", "10"] },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["quality", "outputTokens"],
+    "detectionLimit": "A shift in the rating WITHIN the plausible band, say a move from 8 to 7, does not move this case's quality metric and is invisible to it. Only a move out of the band, or a loss of format compliance, is scored. A calibration shift of one point is a real behavioral change and this case cannot see it.",
+    "provenance": { "kind": "original" },
+    "authoredAt": "2026-08-26",
+    "note": "There is no single correct answer here, which is the point: this case scores FORMAT COMPLIANCE and gross calibration rather than correctness. Measured on this machine at n=8, it returned 8/8 the bare token \"8\" with no preamble, latency CV 12.6 percent. Two things could drift and only one is scored, so the `detectionLimit` says which."
+  }
+]

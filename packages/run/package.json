@@ -1,0 +1,51 @@
+{
+  "name": "@model-regression-sentinel/run",
+  "version": "0.1.0",
+  "description": "Provider-agnostic BYOK execution of frozen cases, recording resolved model identity, three separate latency figures, token counts and two cost bounds.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mstevens843/model-regression-sentinel.git",
+    "directory": "packages/run"
+  },
+  "bugs": {
+    "url": "https://github.com/mstevens843/model-regression-sentinel/issues"
+  },
+  "homepage": "https://github.com/mstevens843/model-regression-sentinel/tree/main/packages/run#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "LICENSE"],
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@model-regression-sentinel/spec": "workspace:^"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "split": "extended",
+  "caseCount": 16,
+  "frozenAt": "2026-08-26",
+  "frozenAtCommit": null,
+  "state": "unavailable",
+  "whatIsProven": "The 16 extended cases have not changed since MANIFEST.sha256 was recorded, checkable with `shasum -a 256 -c corpus/extended/MANIFEST.sha256` from the repository root.",
+  "whatIsNotProven": "That the corpus predates the detector. See corpus/canary/FREEZE.json, which carries the full record; this split has the same status for the same reason.",
+  "reason": "No git operation was permitted in the environment that produced this repository. UNAVAILABLE, not pending.",
+  "howToCashInAFutureRepository": [
+    "1. Author the corpus and the spec it is written against.",
+    "2. Commit them, with no detector in the tree.",
+    "3. Record that sha and tag it, BEFORE writing packages/detect.",
+    "4. Verify - this must exit NON-ZERO: git cat-file -e <sha>:packages/detect/src/compare.ts"
+  ],
+  "doNot": "Do not weaken the freeze check to make it pass, and do not record a commit that does not satisfy it."
+}

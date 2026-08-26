@@ -1,0 +1,54 @@
+{
+  "name": "@model-regression-sentinel/watch",
+  "version": "0.1.0",
+  "description": "Continuous canary watching for a pinned model alias, using an always-valid e-process so repeated looks do not manufacture false alarms.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mstevens843/model-regression-sentinel.git",
+    "directory": "packages/watch"
+  },
+  "bugs": {
+    "url": "https://github.com/mstevens843/model-regression-sentinel/issues"
+  },
+  "homepage": "https://github.com/mstevens843/model-regression-sentinel/tree/main/packages/watch#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "LICENSE"],
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@model-regression-sentinel/spec": "workspace:^",
+    "@model-regression-sentinel/run": "workspace:^",
+    "@model-regression-sentinel/baseline": "workspace:^",
+    "@model-regression-sentinel/detect": "workspace:^"
+  }
+}
