@@ -107,8 +107,12 @@ const mean = (xs: readonly number[]): number =>
  * The (count + 1) / (splits + 1) form again: a calibrated p of exactly zero would claim the effect
  * is larger than anything the provider could produce on its own, which 500 splits cannot establish.
  */
-export function calibratedP(calibration: NullCalibration, observed: number): number {
-  if (!calibration.usable || calibration.sorted.length === 0) return Number.NaN;
+export function calibratedP(calibration: NullCalibration, observed: number): number | null {
+  // NULL, not NaN. There is no calibrated p when the baseline was too thin to split, and NaN is not
+  // serializable under this project's canonical JSON: it broke `--format json` once already through
+  // `allPassCeiling`, and this is the same hole in a second place. Null says "no calibration was
+  // possible" and survives a round trip; NaN says the same thing and throws.
+  if (!calibration.usable || calibration.sorted.length === 0) return null;
   const target = Math.abs(observed);
   let atLeastAsExtreme = 0;
   for (const s of calibration.sorted) if (s >= target - 1e-12) atLeastAsExtreme += 1;
@@ -116,9 +120,9 @@ export function calibratedP(calibration: NullCalibration, observed: number): num
 }
 
 /** A quantile of the measured noise floor, for the report's "how much does this provider wobble" line. */
-export function nullQuantile(calibration: NullCalibration, q: number): number {
+export function nullQuantile(calibration: NullCalibration, q: number): number | null {
   const n = calibration.sorted.length;
-  if (n === 0) return Number.NaN;
+  if (n === 0) return null;
   const at = Math.min(n - 1, Math.max(0, Math.floor(q * (n - 1))));
   return calibration.sorted[at] as number;
 }

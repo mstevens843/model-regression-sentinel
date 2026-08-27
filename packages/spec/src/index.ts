@@ -20,7 +20,16 @@ export {
   promptId,
 } from "./types.js";
 export { checkCorpus, formatCorpusViolations, producibleSignals } from "./corpus.js";
-export { corpusFiles, loadCorpus, loadSplit } from "./load.js";
+export {
+  EXIT_CODES,
+  EXIT_CODE_HELP,
+  EXIT_CONFIRMED_REGRESSION,
+  EXIT_COULD_NOT_LOOK,
+  EXIT_MISUSE,
+  EXIT_OK,
+  describeExit,
+} from "./exitCodes.js";
+export { corpusFiles, loadCorpus, loadSplit, loadSplits, loadV1Corpus } from "./load.js";
 
 // ---- the freeze discipline -----------------------------------------------------------------------
 export { canonicalHash, canonicalJson, bytesHash, parseJson } from "./canonical.js";
@@ -62,9 +71,11 @@ export type {
   PromptId,
   SentinelErrorCode,
   SentinelErrorPayload,
+  SourceTrace,
   Split,
 } from "./types.js";
 export type { CheckScope, CorpusViolation, CorpusViolationCode } from "./corpus.js";
+export type { ExitCode, ExitCodeMeaning } from "./exitCodes.js";
 export type { FreezeRecord, FreezeState, FreezeViolation, FreezeViolationCode } from "./freeze.js";
 export type { ManifestCheck, ManifestEntry, ManifestResult } from "./manifest.js";
 export type { GradeResult, GradedOutput } from "./graders.js";

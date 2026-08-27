@@ -44,7 +44,7 @@ describe("MANIFEST.sha256", () => {
   });
 
   it("excludes FREEZE.json, so recording a freeze never trips the drift check", () => {
-    for (const split of ["canary", "extended"]) {
+    for (const split of ["canary", "extended", "schema"]) {
       const text = readFileSync(join(REPO, `corpus/${split}/MANIFEST.sha256`), "utf8");
       expect(text).not.toContain("FREEZE.json");
       expect(SIDECARS.has("FREEZE.json")).toBe(true);
@@ -53,7 +53,7 @@ describe("MANIFEST.sha256", () => {
 
   it("matches what the standalone script writes, byte for byte", () => {
     // THE PIN. If these ever disagree, one of the two is wrong and nothing else would say so.
-    for (const split of ["canary", "extended"]) {
+    for (const split of ["canary", "extended", "schema"]) {
       const dir = join(REPO, "corpus", split);
       const files = readdirSync(dir)
         .filter((f) => !SIDECARS.has(f))

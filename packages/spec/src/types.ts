@@ -48,18 +48,31 @@ export const promptId = (v: string): PromptId => v as PromptId;
  *              canary set that does not run.
  *   `extended` the fuller set used by `compare`. Run on demand, so it may contain the slow,
  *              expensive, reasoning-heavy cases that would make an hourly canary unaffordable.
+ *   `schema`   structured-output cases, added in v0.2 so that the `schemaValid` gating metric is
+ *              reachable at all. See the paragraph below: this split exists because of a defect.
  *
  * They are never pooled into one number. The canary is underpowered by construction and saying so
  * is the point; pooling it with the extended set would hide that behind a bigger denominator.
+ *
+ * WHY `schema` IS A THIRD DIRECTORY RATHER THAN MORE CASES IN `extended`. The canary and extended
+ * splits are frozen: their bytes are covered by their MANIFEST.sha256 files, and the four recorded
+ * provider runs under `results/runs/` carry a `corpusDigest` computed over exactly those 24 cases.
+ * Appending a case to `extended` would move that digest, and `compare` would answer NOT_COMPARABLE
+ * for every recorded run, which would destroy the only real measured evidence this project has and
+ * which cannot be recollected without paying for the calls again. Corpus growth is therefore
+ * ADDITIVE, as a new directory beside the frozen ones. That is the sibling
+ * `agent-context-containment`'s move with `corpus/holdout` and `corpus/holdout_v2`, and the reason
+ * is written out in docs/FREEZE.md and in corpus/canary/FREEZE.json.
  */
-export type Split = "canary" | "extended";
+export type Split = "canary" | "extended" | "schema";
 
-export const ALL_SPLITS: readonly Split[] = ["canary", "extended"] as const;
+export const ALL_SPLITS: readonly Split[] = ["canary", "extended", "schema"] as const;
 
 /** The id infix each split uses. A case whose id and split disagree is a corpus violation. */
 export const SPLIT_INFIX: Readonly<Record<Split, string>> = {
   canary: "-c-",
   extended: "-x-",
+  schema: "-s-",
 };
 
 /**
@@ -179,17 +192,56 @@ export type Grader =
    *  disagree about what a refusal is. */
   | { readonly kind: "nonRefusal" };
 
-/** Where a case came from. A case with no provenance is a case nobody can audit. */
+/**
+ * Where a case came from. A case with no provenance is a case nobody can audit.
+ *
+ * `from` gained a third member in v0.2. Widening a union is additive in the same sense the schema
+ * evolution rule below means: no frozen byte has to change, every case written against the older
+ * two members still parses and still type-checks, and nothing that read the old value stops
+ * working. Narrowing it later would not be additive, and is therefore not on the table.
+ */
 export type CaseProvenance =
   | { readonly kind: "original" }
   | {
       readonly kind: "derived";
-      readonly from: "durable-agent-outbox" | "agent-context-containment";
+      readonly from:
+        | "durable-agent-outbox"
+        | "agent-context-containment"
+        | "toolcall-risk-classifier";
       /** Locator inside the sibling repository, precise enough to find by hand. */
       readonly ref: string;
       /** What was changed and why. Required and non-empty: a silent adaptation is not attribution. */
       readonly modifications: string;
     };
+
+/**
+ * Exactly where the decision content of a case was read from, field by field.
+ *
+ * WHY THIS EXISTS BESIDE `provenance` RATHER THAN INSIDE IT. `provenance.ref` is one prose string,
+ * and prose is what a reader has to parse before they can go and look. Three of the frozen 24 write
+ * their locator as a sentence with the path buried in the middle, which is fine for a human and
+ * useless to a checker. `SourceTrace` splits the same claim into fields a test can assert on: a
+ * repository name, a path relative to that repository's root, the symbol or case id inside it, and
+ * one line separating what was carried over from what this project invented.
+ *
+ * It is OPTIONAL, and that is not a convenience. `EvalCase.schemaVersion` is a literal 1 whose
+ * evolution rule is optional fields only, forever, because the frozen 24 cannot be rewritten to
+ * carry a new required field without changing bytes that four recorded runs are hashed over. So the
+ * new split carries a `sourceTrace` and the frozen 24 do not, and the difference is permanent.
+ *
+ * WHAT IT IS NOT: a licence claim, and not a guarantee the sibling still has that file at that path.
+ * It is a locator recorded on the day the case was written.
+ */
+export interface SourceTrace {
+  /** The sibling repository's directory name, as it sits beside this one. */
+  readonly repo: string;
+  /** Path inside that repository, from its root, POSIX separators. */
+  readonly path: string;
+  /** The symbol, scenario id, case id or table inside that file. */
+  readonly symbol: string;
+  /** One line: what was carried over, and what belongs to this project. */
+  readonly carried: string;
+}
 
 /** What the model is asked. Frozen: changing any byte here changes the case hash. */
 export interface CaseInput {
@@ -229,6 +281,12 @@ export interface EvalCase {
    */
   readonly detectionLimit: string | null;
   readonly provenance: CaseProvenance;
+  /**
+   * Field-by-field locator for the decision content. OPTIONAL, forever, and absent on the frozen
+   * 24 for the reason given on `schemaVersion` above: adding it there would rewrite bytes that four
+   * recorded runs are hashed over. See `SourceTrace`.
+   */
+  readonly sourceTrace?: SourceTrace;
   readonly authoredAt: string;
   readonly note: string;
 }

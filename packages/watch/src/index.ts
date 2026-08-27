@@ -18,5 +18,25 @@ export { tick, tickExitCode } from "./tick.js";
 export { GITHUB_ACTIONS_HINT, LAUNCHD_HINT, cronSuggestion } from "./schedule.js";
 
 // ---- types ------------------------------------------------------------------------------------------------
+export { lineageOf, rotateWatchFile } from "./state.js";
+export {
+  freshLineage,
+  identityOf,
+  lifetimeTicks,
+  planRotation,
+  rotationRecord,
+  worstMultiple,
+} from "./lineage.js";
+export { debtReport, renderDebt } from "./debt.js";
 export type { Confirmation, IdentityAlert, InitWatchInput, WatchFile } from "./state.js";
+export type {
+  BaselineIdentity,
+  Lineage,
+  PlanRotationInput,
+  RotationDecision,
+  RotationPlan,
+  RotationReason,
+  RotationRecord,
+} from "./lineage.js";
+export type { CaseDebt, DebtReport } from "./debt.js";
 export type { TickInput, TickResult, TickStatus } from "./tick.js";

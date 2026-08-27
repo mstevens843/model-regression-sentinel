@@ -47,6 +47,13 @@ import {
   canonicalJson,
   parseJson,
 } from "@model-regression-sentinel/spec";
+import {
+  type Lineage,
+  type RotationPlan,
+  freshLineage,
+  identityOf,
+  rotationRecord,
+} from "./lineage.js";
 
 /** One field of the provider identity moved, and when. Append-only: this is the permanent record. */
 export interface IdentityAlert {
@@ -88,7 +95,28 @@ export interface WatchFile {
   readonly cases: readonly EProcessState[];
   readonly identityAlerts: readonly IdentityAlert[];
   readonly confirmations: readonly Confirmation[];
+  /**
+   * The watch's history across baselines. OPTIONAL, because a watch file is a durable artifact whose
+   * `schemaVersion` is a literal 1 with no migration path, so evolution here is optional fields only
+   * for the same reason it is on `EvalCase`. A file written before rotations existed genuinely has
+   * no lineage, and reading its absence as generation 1 is the true statement about it.
+   */
+  readonly lineage?: Lineage;
 }
+
+/** Generation 1 with no rotations is the correct reading of a file that predates lineage. */
+export const lineageOf = (file: WatchFile): Lineage =>
+  file.lineage ?? {
+    generation: 1,
+    baseline: {
+      label: "unrecorded",
+      capturedAt: file.startedAt,
+      corpusDigest: file.corpusDigest,
+      replicates: 0,
+      fingerprintSha256: file.fingerprintSha256,
+    },
+    rotations: [],
+  };
 
 /** Everything needed to start a watch. An options object because a watch is pinned to four things. */
 export interface InitWatchInput {
@@ -135,6 +163,7 @@ export function initWatchFile(input: InitWatchInput): WatchFile {
 
   return {
     schemaVersion: 1,
+    lineage: freshLineage(identityOf(input.snapshot)),
     corpusDigest: input.snapshot.corpusDigest,
     requestedModel: input.snapshot.requestedModel,
     provider: input.snapshot.provider,
@@ -213,4 +242,45 @@ export function readWatchFile(path: string): WatchFile {
 export function writeWatchFile(path: string, file: WatchFile): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, canonicalJson(file), "utf8");
+}
+
+/**
+ * Apply an approved rotation, producing the next generation of a watch.
+ *
+ * WHAT SURVIVES AND WHAT DOES NOT, and the split is the whole point:
+ *
+ *   survives   identity alerts, confirmations, and every previous rotation. These are the permanent
+ *              record. A watch on its fourth baseline must not be able to present itself as one that
+ *              started this morning, and this is what stops it.
+ *
+ *   does NOT   the e-process wealth, and it must not. A new baseline means a new `p0`, so the old
+ *              wealth was accumulated betting against a different null. Carrying it forward would be
+ *              arithmetic across two different questions, which is exactly the error the corpus
+ *              digest guard prevents on the compare side.
+ *
+ * `ticks` resets because it counts ticks of THIS generation. `lifetimeTicks` in lineage.ts is how a
+ * report recovers the total, and it is what any honest summary should print.
+ *
+ * Takes an approved `RotationPlan` rather than deciding for itself, so that the refusal rules live
+ * in one place and cannot be bypassed by calling the applier directly.
+ */
+export function rotateWatchFile(
+  file: WatchFile,
+  plan: RotationPlan,
+  input: InitWatchInput,
+): WatchFile {
+  const seeded = initWatchFile(input);
+  const at = input.now.toISOString();
+  const previous = lineageOf(file);
+  return {
+    ...seeded,
+    lineage: {
+      generation: previous.generation + 1,
+      baseline: plan.to,
+      rotations: [...previous.rotations, rotationRecord(plan, file.cases, file.ticks, at)],
+    },
+    // The permanent record, carried across the boundary.
+    identityAlerts: file.identityAlerts,
+    confirmations: file.confirmations,
+  };
 }

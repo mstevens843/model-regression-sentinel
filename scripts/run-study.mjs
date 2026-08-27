@@ -24,7 +24,8 @@
 //   node scripts/run-study.mjs                      print the plan and the cost estimate
 //   node scripts/run-study.mjs --yes                collect the A/A study
 //   node scripts/run-study.mjs --yes --positive-control   also collect the cross-model arm
-//   flags: --model <alias> --replicates <n> --split <canary|extended|both> --concurrency <n>
+//   flags: --model <alias> --replicates <n> --split <canary|extended|schema|both|all>
+//          --concurrency <n>   (`both` is the v0.1 pair and stays comparable with results/runs/)
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -61,7 +62,13 @@ const OUT = join(ROOT, "results", "runs");
 // figure comes from the run itself and is written into the snapshot.
 const PILOT_USD = { constrained: 0.00084, free_form: 0.0015, structured: 0.02 };
 
-const splits = SPLIT === "both" ? ["canary", "extended"] : [SPLIT];
+// `both` still means the v0.1 PAIR, canary plus extended, and that is not an oversight left over
+// from before the schema split existed. A run collected over those two splits carries the same
+// corpusDigest as the four runs already in results/runs/, so it is comparable against them; a run
+// that included the schema split would not be, and `compare` would answer NOT_COMPARABLE. Use
+// `--split all` when collecting a fresh baseline that is meant to stand on its own.
+const splits =
+  SPLIT === "both" ? ["canary", "extended"] : SPLIT === "all" ? [...spec.ALL_SPLITS] : [SPLIT];
 const cases = splits.flatMap((s) => spec.loadSplit(join(ROOT, "corpus", s), s));
 
 const estimateFor = (list, arms) =>

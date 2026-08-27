@@ -123,6 +123,14 @@ jobs:
       - name: The manifests must already cover the corpus on disk
         run: node scripts/write-manifest.mjs --check
 
+      # The same idea one level up. docs/CORPUS.md states how many cases of each archetype are in
+      # each split, and how many declare a detectionLimit. Those are claims about the corpus, and a
+      # claim maintained by hand goes wrong silently: results/CALIBRATION.md's "schemaValid exists
+      # on only two cases" was true when it was written and is the exact shape of sentence a reader
+      # will not re-count. --check regenerates the table and exits 1 if it would differ.
+      - name: The case-composition table must match the corpus
+        run: node scripts/case-composition.mjs --check
+
       # THE NEGATIVE CONTROL. A check that only ever passes proves nothing: corpus-integrity has
       # been green on every run of this pipeline, and that is equally consistent with the corpus
       # being intact and with `shasum -c` being pointed at a manifest it cannot fail against. So

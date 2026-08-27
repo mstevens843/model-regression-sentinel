@@ -23,6 +23,8 @@ import {
 export class NoopProvider implements Provider {
   readonly name = "noop";
   readonly model = "none";
+  readonly endpoint = "none";
+  readonly tokenSource = "none" as const;
   private readonly reason: string;
 
   constructor(reason = "no credentials available in this environment") {

@@ -8,7 +8,16 @@
 // today and turn every internal rename into someone else's breaking change.
 
 // ---- commands -------------------------------------------------------------------------------------
-export { USAGE, cmdCompare, cmdCorpus, cmdRun, cmdSchedule, cmdWatch } from "./commands.js";
+export {
+  USAGE,
+  cmdBaseline,
+  cmdCompare,
+  cmdCorpus,
+  cmdRun,
+  cmdSchedule,
+  cmdWatch,
+} from "./commands.js";
+export { cmdRelease } from "./release.js";
 
 // ---- argument parsing ------------------------------------------------------------------------------
 export { UsageError, bool, flag, parseArgs, required } from "./args.js";

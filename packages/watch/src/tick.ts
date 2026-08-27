@@ -17,8 +17,12 @@
 // A ROUND COLLECTED AGAINST A DIFFERENT CORPUS OR A DIFFERENT ALIAS IS ALSO A FAILURE TO LOOK, not a
 // finding. The accumulated wealth is a bet about ONE stream, and feeding it observations from
 // another stream does not produce a weaker result, it produces a meaningless one. `compare` calls
-// this NOT_COMPARABLE and returns 2; this calls it `could_not_look` and returns 2, which is the same
-// judgement wearing the vocabulary of a watcher.
+// this NOT_COMPARABLE and returns 2, the misuse code, because the caller handed it the wrong file.
+// A watcher handed a round from another stream is in the same position and this used to share that
+// code with it. It no longer does: as of v0.2 an unusable round returns 3, `could_not_look`,
+// because from the watcher's side the common cause is a provider that would not answer rather than
+// an operator who mistyped, and paging someone for a typo is how an alert channel gets muted. Both
+// are still emphatically not 1, since neither is evidence the provider got worse.
 //
 // AN ALARM IS NOT A CONFIRMED REGRESSION AND MUST NOT FAIL A BUILD. `alarm_raised` means one case's
 // e-process crossed 1/alpha. That crossing is a valid any-time rejection and it is worth a person's
@@ -59,7 +63,12 @@
 
 import { type EProcessState, extractMetrics, observeMany } from "@model-regression-sentinel/detect";
 import type { FingerprintChange, RunSnapshot } from "@model-regression-sentinel/run";
-import type { EvalCase } from "@model-regression-sentinel/spec";
+import {
+  EXIT_CONFIRMED_REGRESSION,
+  EXIT_COULD_NOT_LOOK,
+  EXIT_OK,
+  type EvalCase,
+} from "@model-regression-sentinel/spec";
 import type { Confirmation, IdentityAlert, WatchFile } from "./state.js";
 
 export interface TickInput {
@@ -208,16 +217,14 @@ export function tick(input: TickInput): TickResult {
  * NOT_COMPARABLE is 2 because the tool was misused rather than the provider having moved.
  */
 export function tickExitCode(result: TickResult): number {
-  switch (result.status) {
-    case "confirmed_drift":
-      return 1;
-    case "could_not_look":
-      return 2;
-    case "quiet":
-    case "alarm_raised":
-    case "identity_changed":
-      return 0;
-  }
+  // v0.2 splits what v0.1 collapsed. `could_not_look` used to return 2 alongside every other
+  // misuse, and it is not misuse: the invocation was fine and the world would not cooperate. It now
+  // returns EXIT_COULD_NOT_LOOK, so a pipeline can page an on-call for an outage and open a ticket
+  // for a typo without having to parse prose to tell them apart. Neither is 1, because neither is
+  // evidence that the provider got worse.
+  if (result.status === "could_not_look") return EXIT_COULD_NOT_LOOK;
+  if (result.status === "confirmed_drift") return EXIT_CONFIRMED_REGRESSION;
+  return EXIT_OK;
 }
 
 /**

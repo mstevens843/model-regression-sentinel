@@ -150,7 +150,8 @@ export function markdownTable(
 // ---- numbers -------------------------------------------------------------------------------------
 
 /** Non-finite is a real answer here and is never printed as a zero. */
-export const finite = (value: number): number | null => (Number.isFinite(value) ? value : null);
+export const finite = (value: number): number | null =>
+  value !== null && Number.isFinite(value) ? value : null;
 
 /** A signed number. Exact zero carries no sign, because "+0.0" reads as a small rise and is not one. */
 export const signedFixed = (value: number, digits: number): string => {
@@ -160,12 +161,14 @@ export const signedFixed = (value: number, digits: number): string => {
 };
 
 /** A LEVEL that is a proportion: a pass rate, a refusal rate. */
-export const asPercent = (value: number, digits = 1): string =>
-  Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "not measured";
+export const asPercent = (value: number | null, digits = 1): string =>
+  value !== null && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "not measured";
 
 /** A DIFFERENCE of two proportions. Percentage points. See the header for why not percent. */
-export const asPoints = (value: number, digits = 1): string =>
-  Number.isFinite(value) ? `${signedFixed(value * 100, digits)} pp` : "not measured";
+export const asPoints = (value: number | null, digits = 1): string =>
+  value !== null && Number.isFinite(value)
+    ? `${signedFixed(value * 100, digits)} pp`
+    : "not measured";
 
 /**
  * A MAGNITUDE in percentage points, unsigned.
@@ -174,23 +177,27 @@ export const asPoints = (value: number, digits = 1): string =>
  * a leading plus makes a 25-point detection threshold look like a 25-point rise, which is the
  * opposite of what it says.
  */
-export const asPointsMagnitude = (value: number, digits = 1): string =>
-  Number.isFinite(value) ? `${(value * 100).toFixed(digits)} pp` : "not measured";
+export const asPointsMagnitude = (value: number | null, digits = 1): string =>
+  value !== null && Number.isFinite(value) ? `${(value * 100).toFixed(digits)} pp` : "not measured";
 
 /** A relative change of a continuous quantity, as a fraction of its own baseline. */
-export const asRelative = (value: number, digits = 1): string =>
-  Number.isFinite(value) ? `${signedFixed(value * 100, digits)}%` : "not measured";
+export const asRelative = (value: number | null, digits = 1): string =>
+  value !== null && Number.isFinite(value)
+    ? `${signedFixed(value * 100, digits)}%`
+    : "not measured";
 
 /** A p-value. A floor rather than a zero: no sampled null can support a p of exactly zero. */
-export function asP(value: number): string {
-  if (!Number.isFinite(value)) return "not measured";
+export function asP(value: number | null): string {
+  // Null is an absent calibration, not a p-value of zero. "not measured" is the honest rendering and
+  // the same one a non-finite value gets.
+  if (value === null || !Number.isFinite(value)) return "not measured";
   if (value < 0.001) return "<0.001";
   return value.toFixed(3);
 }
 
 /** A continuous metric's own units, so a token count is never printed as if it were a rate. */
-export function asMagnitude(metric: MetricKey, value: number): string {
-  if (!Number.isFinite(value)) return "not measured";
+export function asMagnitude(metric: MetricKey, value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "not measured";
   if (metric === "costUsd") return `$${value.toFixed(6)}`;
   if (metric === "latencyMs") return `${Math.round(value)} ms`;
   return value.toFixed(1);
@@ -222,13 +229,23 @@ export const intervalOf = (finding: MetricFinding): string => {
  * columns finally mean the same thing.
  */
 export const noiseFloorOf = (finding: MetricFinding): string =>
-  finding.binary
-    ? asPointsMagnitude(finding.noiseFloor95)
-    : asRelativeMagnitude(finding.noiseFloor95);
+  // Null means no calibration was possible, which is a different statement from a floor of zero and
+  // must not render as one. A reader who sees "0.0 pp" concludes this provider is perfectly stable.
+  finding.noiseFloor95 === null
+    ? "(not measured)"
+    : finding.binary
+      ? asPointsMagnitude(finding.noiseFloor95)
+      : asRelativeMagnitude(finding.noiseFloor95);
 
-/** A relative magnitude, unsigned. A noise floor has no direction. */
-export const asRelativeMagnitude = (value: number): string =>
-  Number.isFinite(value) ? `${(Math.abs(value) * 100).toFixed(1)}%` : "n/a";
+/**
+ * A relative magnitude, unsigned. A noise floor has no direction.
+ *
+ * Accepts null because an absent calibration is a real state: the baseline was too thin to split, so
+ * there is no measured floor. Rendering that as a number would tell a reader this provider holds
+ * perfectly still.
+ */
+export const asRelativeMagnitude = (value: number | null): string =>
+  value !== null && Number.isFinite(value) ? `${(Math.abs(value) * 100).toFixed(1)}%` : "n/a";
 
 /**
  * How many draws a binary rate rests on.

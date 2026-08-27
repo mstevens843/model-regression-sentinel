@@ -21,6 +21,7 @@
 // Ids are stable. Every mutant's `mustFail` list refers to them, so renaming one silently
 // re-points a negative control at a scenario it was never written against.
 
+import { metadataOf, skipped } from "@model-regression-sentinel/run";
 import { exitCodeFor } from "./compare.js";
 import { type CheckResult, type Detector, check, expectEqual } from "./detector.js";
 import { needsRebaseline, sensitivityDebt, startEProcess, wealthFloor } from "./eprocess.js";
@@ -436,6 +437,73 @@ export const spentSensitivityIsReported: CalibrationScenario = {
   },
 };
 
+export const metadataDriftIsNotQualityDrift: CalibrationScenario = {
+  id: "12",
+  title: "metadataDriftIsNotQualityDrift: a changed endpoint is reported, and is not a regression",
+  run(detector) {
+    const out: CheckResult[] = [];
+
+    // Behaviour held perfectly still: the SAME seed on both arms, so every recorded output is
+    // identical. Only the provider metadata moves. Anything this reports as a regression is being
+    // reported on the strength of a field that carries no p-value at all.
+    const shared = { replicates: 10, capturedAt: "2026-08-26T00:00:00.000Z" } as const;
+    const before = synthSnapshot(CASES, {
+      ...shared,
+      label: "baseline",
+      rng: mulberry32(11),
+      metadata: metadataOf({
+        provider: "claude_cli:sonnet",
+        requestedModel: "sonnet",
+        response: { ...skipped(""), error: "", modelServed: "m", contextWindow: 1_000_000 },
+        endpoint: "cli",
+        tokenSource: "cli_usage",
+        observedAt: "2026-08-26T00:00:00.000Z",
+      }),
+    });
+    const after = synthSnapshot(CASES, {
+      ...shared,
+      label: "candidate",
+      rng: mulberry32(11),
+      metadata: metadataOf({
+        provider: "anthropic_api:claude-sonnet-5",
+        requestedModel: "sonnet",
+        response: { ...skipped(""), error: "", modelServed: "m", contextWindow: 1_000_000 },
+        endpoint: "https://api.anthropic.com",
+        tokenSource: "anthropic_usage",
+        observedAt: "2026-08-26T01:00:00.000Z",
+      }),
+    });
+
+    const r = detector.compare(EVAL, before, after, FAST);
+
+    out.push(
+      check(
+        "a metadata-only difference is not reported as drift",
+        r.verdict !== "SUSPECTED_DRIFT" && r.verdict !== "CONFIRMED_DRIFT",
+        `verdict=${r.verdict} reason=${r.reason}`,
+      ),
+    );
+    out.push(check("and does not fail a build", exitCodeFor(r) === 0, `exit=${exitCodeFor(r)}`));
+    // The other half, and the reason this is not satisfied by a detector that ignores metadata: the
+    // change must still be VISIBLE. Silence here would be a different failure with the same verdict.
+    out.push(
+      check(
+        "the endpoint change is still reported",
+        r.metadataChanges.some((c) => c.field === "endpoint" && c.kind === "changed"),
+        JSON.stringify(r.metadataChanges.map((c) => `${c.field}:${c.kind}`)),
+      ),
+    );
+    out.push(
+      check(
+        "the token-source change is still reported",
+        r.metadataChanges.some((c) => c.field === "tokenSource"),
+        JSON.stringify(r.metadataChanges.map((c) => c.field)),
+      ),
+    );
+    return out;
+  },
+};
+
 export const ALL_SCENARIOS: readonly CalibrationScenario[] = [
   aaIsQuiet,
   largeDriftIsCaught,
@@ -448,4 +516,5 @@ export const ALL_SCENARIOS: readonly CalibrationScenario[] = [
   confirmationIsRequired,
   identityChangeIsReportedWithoutAPValue,
   spentSensitivityIsReported,
+  metadataDriftIsNotQualityDrift,
 ];

@@ -30,13 +30,16 @@ export {
   evidenceMultiple,
   kellyLambda,
   mixtureLogWealth,
+  HEALTHY_MULTIPLE,
   needsRebaseline,
   observe,
+  rebaselineAdvice,
   observeMany,
   sensitivityDebt,
   startEProcess,
   wealth,
   wealthFloor,
+  worstAdvice,
 } from "./eprocess.js";
 
 // ---- grading the detector itself ---------------------------------------------------------------------
@@ -79,7 +82,13 @@ export type { MetricSamples } from "./metrics.js";
 export type { PermutationMethod, PermutationResult, SignFlipOptions } from "./permutation.js";
 export type { CaseSamples, NullCalibration } from "./nullCalibration.js";
 export type { MdeOptions, MdeResult } from "./mde.js";
-export type { CusumVerdict, EProcessConfig, EProcessState } from "./eprocess.js";
+export type {
+  CusumVerdict,
+  EProcessConfig,
+  EProcessState,
+  RebaselineAdvice,
+  SensitivityState,
+} from "./eprocess.js";
 export type { CalibrationScenario } from "./scenarios.js";
 export type { DetectorMutant } from "./mutants/index.js";
 export type { CalibrationReport, ScenarioResult } from "./run.js";

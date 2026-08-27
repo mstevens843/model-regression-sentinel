@@ -103,6 +103,12 @@ export function fingerprintDiff(
 /** Fields the provider declined to expose, so a report can say so rather than implying stability. */
 export const undisclosedFields = (f: ProviderFingerprint): readonly string[] => {
   const out: string[] = [];
+  // `resolvedModel` first, because it is the identity itself rather than a fact about it. A body
+  // with no `model` field yields an empty string, and an empty string compares equal to the next
+  // empty string forever: without this line a provider that never disclosed what it served would
+  // read as a provider whose identity was perfectly stable. Measured against a fake transport in
+  // `packages/run/test/byok.test.ts`; the HTTP wire formats both allow the field to be absent.
+  if (f.resolvedModel === "") out.push("resolvedModel");
   if (f.contextWindow === null) out.push("contextWindow");
   if (f.maxOutputTokens === null) out.push("maxOutputTokens");
   if (f.canonicalModel === "") out.push("canonicalModel");

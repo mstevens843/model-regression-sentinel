@@ -65,6 +65,9 @@ export interface ReplayOptions {
 export class ReplayProvider implements Provider {
   readonly name: string;
   readonly model: string;
+  readonly endpoint = "replay";
+  /** `replayed`, never the original source. A replayed count is a recording, not a fresh reading. */
+  readonly tokenSource = "replayed" as const;
   private readonly table: ReadonlyMap<string, readonly ProviderResponse[]>;
   private readonly cursor = new Map<string, number>();
   private readonly options: ReplayOptions;

@@ -48,6 +48,13 @@ else
   bad "the manifest and the corpus disagree"
 fi
 
+step "3b. the case-composition table matches the corpus"
+if node scripts/case-composition.mjs --check >/dev/null 2>&1; then
+  pass "docs/CORPUS.md is current"
+else
+  bad "docs/CORPUS.md and the corpus disagree; run pnpm docs:composition"
+fi
+
 step "4. NEGATIVE CONTROL: the drift check must reject a corrupted corpus"
 target="corpus/canary/outbox.json"
 backup="$(mktemp)"

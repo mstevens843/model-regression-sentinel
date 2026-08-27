@@ -18,7 +18,12 @@
 // output tokens are log-normal with a CV near 18 percent, and latency is log-normal with a heavy
 // component reproducing the one-in-eight sample at 3.57 times the median.
 
-import type { ProviderResponse, RunRecord, RunSnapshot } from "@model-regression-sentinel/run";
+import type {
+  ProviderMetadata,
+  ProviderResponse,
+  RunRecord,
+  RunSnapshot,
+} from "@model-regression-sentinel/run";
 import { type Rng, binomial } from "./rng.js";
 
 export interface SynthCase {
@@ -43,6 +48,11 @@ export interface SynthOptions {
   readonly tokenScale?: number;
   /** Multiplies every case's latency median. For latency scenarios. */
   readonly latencyScale?: number;
+  /**
+   * Provider metadata to attach. Present so a scenario can move metadata while holding behaviour
+   * perfectly still, which is the only way to test that the two are reported apart.
+   */
+  readonly metadata?: ProviderMetadata;
 }
 
 const PASS = "PASS";
@@ -117,6 +127,7 @@ export function synthSnapshot(cases: readonly SynthCase[], options: SynthOptions
       serviceTier: "standard",
       sha256: `fp-${options.resolvedModel ?? "synthetic-model-1"}`,
     },
+    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
     records,
     errorCount: 0,
     cost: {

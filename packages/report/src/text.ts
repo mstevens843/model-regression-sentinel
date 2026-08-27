@@ -71,6 +71,10 @@ export function renderText(result: CompareResult): string {
   section("identity");
   lines.push(...identityLines(result));
 
+  section("provider metadata");
+  lines.push(...metadataLines(result));
+  lines.push("");
+
   section("metrics");
   lines.push(...metricLines(result));
 
@@ -178,7 +182,11 @@ interface Ceiling {
 function ceilingOf(result: CompareResult): Ceiling {
   for (const finding of result.findings) {
     const mde = finding.mde;
-    if (mde !== null) return { value: mde.allPassCeiling, replicates: mde.replicates };
+    // A continuous metric's MDE carries a null ceiling: there is no "all passed" to bound. Skip to a
+    // binary metric that has one rather than presenting an absence as a number.
+    if (mde !== null && mde.allPassCeiling !== null) {
+      return { value: mde.allPassCeiling, replicates: mde.replicates };
+    }
   }
   const n = Math.min(result.replicates.baseline, result.replicates.candidate);
   return { value: ruleOfThree(n), replicates: n };
@@ -419,4 +427,56 @@ function provenanceLines(result: CompareResult): readonly string[] {
       "  ",
     ),
   ];
+}
+
+/**
+ * Provider metadata drift, reported in its own section and never folded into a verdict.
+ *
+ * The rows that look like nothing are the reason this section exists. A field neither run captured,
+ * or a field one side reports as unknown, is printed rather than filtered, because filtering it
+ * would turn "nobody could compare this" into "this agreed" on the way to the page. Two absences are
+ * two absences.
+ */
+function metadataLines(result: CompareResult): readonly string[] {
+  const changes = result.metadataChanges;
+  if (changes.length === 0) {
+    return wrap(
+      "Every recorded metadata field matched: same resolved model, same capability facts, same endpoint, same adapter and the same token source. The comparison is of like with like.",
+      RULE_WIDTH,
+      "  ",
+    );
+  }
+
+  const real = changes.filter(
+    (c) => c.kind === "changed" || c.kind === "appeared" || c.kind === "disappeared",
+  );
+  const gaps = changes.filter((c) => c.kind === "both_absent" || c.kind === "indeterminate");
+  const out: string[] = [];
+
+  if (real.length > 0) {
+    out.push(
+      ...renderTable(
+        [{ header: "field" }, { header: "kind" }, { header: "before" }, { header: "after" }],
+        real.map((c) => [c.field, c.kind, c.before, c.after]),
+      ),
+    );
+    out.push("");
+    out.push(
+      ...wrap(
+        "Metadata carries NO p-value: a field either moved or it did not, and no sampling is involved. It is also not a behaviour change. What it does is alter what the numbers MEAN, and raise the priority of any behavioural finding in the same run.",
+        RULE_WIDTH,
+        "  ",
+      ),
+    );
+  }
+
+  if (gaps.length > 0) {
+    if (real.length > 0) out.push("");
+    out.push("  NOT COMPARABLE, and therefore not evidence of anything:");
+    for (const g of gaps) {
+      out.push(`    ${g.field}: ${g.before} against ${g.after}`);
+      out.push(...wrap(g.note, RULE_WIDTH, "      "));
+    }
+  }
+  return out;
 }

@@ -21,6 +21,7 @@ import { alwaysQuiet } from "./alwaysQuiet.js";
 import { anyCorpus } from "./anyCorpus.js";
 import { hidesDebt } from "./hidesDebt.js";
 import { meanLatencyGate } from "./meanLatencyGate.js";
+import { metadataIsRegression } from "./metadataIsRegression.js";
 import { noConfirmation } from "./noConfirmation.js";
 import { peeks } from "./peeks.js";
 import { rawDiff } from "./rawDiff.js";
@@ -93,6 +94,13 @@ export const ALL_MUTANTS: readonly DetectorMutant[] = [
     mustFail: ["11"],
     detector: hidesDebt,
   },
+  {
+    id: "metadataIsRegression",
+    description:
+      "fails a build on a metadata change, which carries no p-value and is not behaviour",
+    mustFail: ["12"],
+    detector: metadataIsRegression,
+  },
 ];
 
 export {
@@ -105,4 +113,5 @@ export {
   anyCorpus,
   singleReplicateOk,
   hidesDebt,
+  metadataIsRegression,
 };

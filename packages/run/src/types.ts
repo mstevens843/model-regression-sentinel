@@ -28,6 +28,7 @@
 // reader sees a table with a missing row and assumes it was not applicable.
 
 import type { JsonValue } from "@model-regression-sentinel/spec";
+import type { TokenSource } from "./metadata.js";
 
 /** What the model is asked. Rendered from a case plus its prompt version. */
 export interface CompletionRequest {
@@ -42,6 +43,17 @@ export interface CompletionRequest {
 export interface ProviderResponse {
   /** The raw output text, kept verbatim. Everything downstream re-derives from this. */
   readonly text: string;
+  /**
+   * Token counts, and a known limitation stated rather than papered over.
+   *
+   * These are `number` and not `number | null`, so ZERO AND "NOT EXPOSED" ARE THE SAME VALUE HERE.
+   * A provider that omits its `usage` block entirely reads as a call that consumed nothing. The
+   * capability fields below are `number | null` precisely because that distinction mattered there;
+   * it was not made here, and widening it now would change the on-disk shape of every archived
+   * snapshot, which the freeze discipline does not allow inside a minor version. Until then the
+   * discriminator available to a reader is `error`, plus the fact that a real completion with a
+   * non-empty `text` and zero input tokens is not a thing any of these providers produce.
+   */
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadTokens: number;
@@ -99,6 +111,21 @@ export interface Provider {
   readonly name: string;
   /** What was ASKED for. The alias, if an alias was used. Never overwritten by what was served. */
   readonly model: string;
+  /**
+   * Where the calls go: `cli`, or the https origin of an endpoint. Never a full URL, which can carry
+   * a query string and therefore a credential. Optional, and an absent value is recorded as
+   * `unknown` rather than assumed, because "we did not capture the endpoint" and "there is no
+   * endpoint" are different claims.
+   */
+  readonly endpoint?: string;
+  /**
+   * Where the token counts come from. A run counted by a CLI harness includes tokens that harness
+   * injected; a run counted by a bare API does not. Comparing cost or output-token drift across that
+   * boundary compares two different quantities, so the boundary is recorded rather than inferred.
+   */
+  readonly tokenSource?: TokenSource;
+  /** The harness's own version, where there is a harness. A CLI upgrade can move behaviour. */
+  readonly harnessVersion?: string;
   available(): Availability;
   complete(request: CompletionRequest): Promise<ProviderResponse>;
 }

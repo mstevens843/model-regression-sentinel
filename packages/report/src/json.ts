@@ -140,11 +140,11 @@ function findingJson(finding: MetricFinding): unknown {
       k: finding.permutation.k,
       exchangeable: finding.permutation.exchangeable,
     },
-    calibratedP: finite(finding.calibratedP),
-    noiseFloor95: finite(finding.noiseFloor95),
+    calibratedP: nullableFinite(finding.calibratedP),
+    noiseFloor95: nullableFinite(finding.noiseFloor95),
     // The disambiguator. See the header: null in the two fields above means NOT MEASURED, and a
     // consumer must be able to tell that from a measured zero without guessing.
-    calibrated: Number.isFinite(finding.calibratedP),
+    calibrated: finding.calibratedP !== null && Number.isFinite(finding.calibratedP),
     significant: finding.significant,
     exceedsNoiseFloor: finding.exceedsNoiseFloor,
     confirmed: finding.confirmed,
@@ -160,15 +160,16 @@ function findingJson(finding: MetricFinding): unknown {
             ties: finding.pooled.test.ties,
             hodgesLehmannShift: finite(finding.pooled.shift),
           },
-    // `allPassCeiling` is DELIBERATELY NaN on a continuous metric, because there is no "all passed"
-    // to bound, and `canonicalJson` refuses to serialize a NaN. Spreading the MdeResult raw threw
-    // `uncanonicalizable_value` on every comparison that reached outputTokens, latencyMs or costUsd,
-    // which is every comparison of two real runs. Nulled here for exactly the reason the header
-    // gives and exactly the way `powerJson` below already nulls the same field.
+    // `allPassCeiling` is null on a continuous metric, because there is no "all passed" to bound.
+    // It was NaN until v0.2, and `canonicalJson` refuses NaN by design, so spreading the MdeResult
+    // raw threw `uncanonicalizable_value` on every comparison that reached outputTokens, latencyMs
+    // or costUsd, which is every comparison of two real runs. The type now carries `number | null`
+    // so the fix lives at the source rather than at this boundary, and `finite` is kept here anyway
+    // because a boundary that assumes its input is clean is a boundary that stops being a boundary.
     mde:
       finding.mde === null
         ? null
-        : { ...finding.mde, allPassCeiling: finite(finding.mde.allPassCeiling) },
+        : { ...finding.mde, allPassCeiling: nullableFinite(finding.mde.allPassCeiling) },
     perCase: finding.perCase.map((c) => ({
       caseId: c.caseId,
       baseline: finite(c.baseline),
@@ -195,7 +196,7 @@ function powerJson(result: CompareResult): unknown {
     // The rule of three, and null when no simulation ran rather than a number recomputed here: the
     // markdown renderer may recompute it for a reader, a machine consumer should not be handed a
     // number whose provenance it cannot see.
-    allPassCeiling: ceiling === null ? null : finite(ceiling.allPassCeiling),
+    allPassCeiling: ceiling === null ? null : nullableFinite(ceiling.allPassCeiling),
     allPassCeilingSource: ceiling === null ? "not computed" : "mde simulation",
     underpoweredMetrics: [...result.underpoweredMetrics],
     perMetric: withMde.map((f) => {
@@ -212,8 +213,19 @@ function powerJson(result: CompareResult): unknown {
         cases: mde === null ? null : mde.cases,
         replicates: mde === null ? null : mde.replicates,
         simulations: mde === null ? null : mde.simulations,
-        allPassCeiling: mde === null ? null : finite(mde.allPassCeiling),
+        allPassCeiling: mde === null ? null : nullableFinite(mde.allPassCeiling),
       };
     }),
   };
 }
+
+/**
+ * A number that may legitimately be absent, rendered as null and never as NaN.
+ *
+ * Separate from `finite` because the two answer different questions. `finite` guards a value that
+ * SHOULD be a number against an arithmetic accident; this one carries an absence that the type
+ * system already admits. Collapsing them would hide the difference between "this could not be
+ * computed" and "this does not apply".
+ */
+const nullableFinite = (v: number | null): number | null =>
+  v === null || !Number.isFinite(v) ? null : v;

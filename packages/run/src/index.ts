@@ -17,7 +17,22 @@ export {
 export { skipped } from "./types.js";
 
 // ---- running a corpus ----------------------------------------------------------------------------
-export { corpusDigestOf, observedFingerprints, renderRequest, runCorpus } from "./runner.js";
+export {
+  ADAPTER_VERSION,
+  corpusDigestOf,
+  observedFingerprints,
+  renderRequest,
+  runCorpus,
+} from "./runner.js";
+export {
+  diffMetadata,
+  metaUnknown,
+  metaValue,
+  metadataOf,
+  renderMeta,
+  substantive,
+  uncomparable,
+} from "./metadata.js";
 
 // ---- identity, which is drift detection with no statistics in it ------------------------------------
 export { fingerprintDiff, fingerprintOf, undisclosedFields } from "./fingerprint.js";
@@ -37,6 +52,15 @@ export {
 export type { Availability, CompletionRequest, Provider, ProviderResponse } from "./types.js";
 export type { RunOptions, RunRecord, RunSnapshot } from "./runner.js";
 export type { FingerprintChange, ProviderFingerprint } from "./fingerprint.js";
+export type {
+  MetaField,
+  MetaValue,
+  MetadataChange,
+  MetadataChangeKind,
+  MetadataInput,
+  ProviderMetadata,
+  TokenSource,
+} from "./metadata.js";
 export type { CostBounds, CostInput } from "./cost.js";
 export type {
   ClaudeCliOptions,

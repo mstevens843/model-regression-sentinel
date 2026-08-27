@@ -54,7 +54,10 @@
 
 import {
   type FingerprintChange,
+  type MetadataChange,
+  type ProviderMetadata,
   type RunSnapshot,
+  diffMetadata,
   fingerprintDiff,
 } from "@model-regression-sentinel/run";
 import { type EvalCase, GATING_METRICS, type MetricKey } from "@model-regression-sentinel/spec";
@@ -109,8 +112,16 @@ export interface MetricFinding {
   readonly effect: number;
   readonly effectCI: Interval;
   readonly permutation: PermutationResult;
-  /** NaN when the baseline had too few replicates to calibrate. */
-  readonly calibratedP: number;
+  /**
+   * NULL when the baseline had too few replicates to calibrate, never NaN.
+   *
+   * The distinction is not cosmetic. `canonicalJson` refuses NaN by design, because
+   * `JSON.stringify` would silently write `null` and let two different objects hash the same. This
+   * field was NaN until an adversarial pass found that `compare --format json` threw on any run
+   * with fewer than four replicates per case, which is exactly the underpowered run a user is most
+   * likely to be inspecting. Null is both the honest value and the serializable one.
+   */
+  readonly calibratedP: number | null;
   /**
    * The 95th percentile of this provider's own A/A wobble, in THE SAME UNITS AS `effect`.
    *
@@ -119,7 +130,7 @@ export interface MetricFinding {
    * version reported the absolute calibration here while `calibratedP` used the relative one, which
    * made a latency noise floor render as several hundred thousand percent.
    */
-  readonly noiseFloor95: number;
+  readonly noiseFloor95: number | null;
   readonly mde: MdeResult | null;
   readonly significant: boolean;
   /** Null when no calibration was possible. Null is not the same as false and does not confirm. */
@@ -150,6 +161,17 @@ export interface CompareResult {
   readonly alpha: number;
   readonly findings: readonly MetricFinding[];
   readonly identityChanges: readonly FingerprintChange[];
+  /**
+   * Provider metadata differences: endpoint, adapter, harness version, token source, and the
+   * capability fields, each classified by whether it is a real difference or a gap in what was
+   * captured.
+   *
+   * SEPARATE FROM `findings` ON PURPOSE, and never folded into a verdict. Metadata carries no
+   * p-value: a field either moved or it did not, and no sampling is involved. A changed endpoint or
+   * a changed token source alters what the numbers MEAN without being a behaviour change, and
+   * scoring it as quality drift would be the same category error this project exists to avoid.
+   */
+  readonly metadataChanges: readonly MetadataChange[];
   readonly baselineLabel: string;
   readonly candidateLabel: string;
   readonly baselineCapturedAt: string;
@@ -178,6 +200,7 @@ export function compare(
     alpha,
     findings: [],
     identityChanges: identityChangesOf(baseline, candidate),
+    metadataChanges: metadataChangesOf(baseline, candidate),
     baselineLabel: baseline.label,
     candidateLabel: candidate.label,
     baselineCapturedAt: baseline.capturedAt,
@@ -297,6 +320,7 @@ export function compare(
     alpha,
     findings,
     identityChanges,
+    metadataChanges: metadataChangesOf(baseline, candidate),
     baselineLabel: baseline.label,
     candidateLabel: candidate.label,
     baselineCapturedAt: baseline.capturedAt,
@@ -329,6 +353,34 @@ export function exitCodeFor(
   if (result.verdict === "CONFIRMED_DRIFT") return 1;
   if (gate === "suspected" && result.verdict === "SUSPECTED_DRIFT") return 1;
   return 0;
+}
+
+/**
+ * Metadata differences between two runs, including the case where one of them never captured any.
+ *
+ * The four real runs in `results/runs/` were collected in v0.1, before metadata existed. Comparing
+ * them must not silently report "no metadata drift", which is what an empty array would say. It
+ * reports one indeterminate row instead, because "we did not capture this" is a fact about us and
+ * never evidence about the provider.
+ */
+function metadataChangesOf(a: RunSnapshot, b: RunSnapshot): readonly MetadataChange[] {
+  const before: ProviderMetadata | undefined = a.metadata;
+  const after: ProviderMetadata | undefined = b.metadata;
+  if (before === undefined || after === undefined) {
+    const missing = [before === undefined ? a.label : null, after === undefined ? b.label : null]
+      .filter((x): x is string => x !== null)
+      .join(" and ");
+    return [
+      {
+        field: "adapter",
+        kind: "indeterminate",
+        before: before === undefined ? "(unknown)" : "(captured)",
+        after: after === undefined ? "(unknown)" : "(captured)",
+        note: `no provider metadata was recorded on ${missing}, so none of it could be compared. This is not evidence that the provider setup held still.`,
+      },
+    ];
+  }
+  return diffMetadata(before, after);
 }
 
 function identityChangesOf(a: RunSnapshot, b: RunSnapshot): readonly FingerprintChange[] {
@@ -449,8 +501,10 @@ function analyse(
         );
 
   const significant = permutation.p <= options.alpha;
+  // Null propagates. No calibration means no second opinion, and a finding cannot be confirmed on
+  // one null alone, so an uncalibrated run can never produce a confirmed regression.
   const exceedsNoiseFloor =
-    calibration.usable && Number.isFinite(calP) ? calP <= options.alpha : null;
+    calibration.usable && calP !== null && Number.isFinite(calP) ? calP <= options.alpha : null;
 
   return {
     calibration,

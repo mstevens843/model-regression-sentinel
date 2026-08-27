@@ -1,0 +1,201 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "obx-s-001",
+    "split": "schema",
+    "archetype": "structured_json",
+    "title": "A structured decision about what an idempotency key is a function of.",
+    "promptId": "decide-v1",
+    "input": {
+      "system": "",
+      "user": "An outbox derives the idempotency key it sends to an external payment API. One action has now been attempted twice, the second attempt ran under a new lease epoch held by a different worker, and the payload never changed. Decide what key the third attempt should carry relative to the key the first attempt carried, and say whether the attempt number is one of the inputs to the derivation.",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "decision": { "type": "string", "enum": ["SAME_KEY", "NEW_KEY"] },
+          "includesAttemptNumber": { "type": "boolean" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 400 }
+        },
+        "required": ["decision", "includesAttemptNumber", "confidence", "reason"],
+        "additionalProperties": false
+      },
+      "maxOutputTokens": 2048
+    },
+    "graders": [
+      { "kind": "jsonSchema" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["schemaValid", "outputTokens"],
+    "detectionLimit": "The graders check that the object is well formed, that `decision` is one of the two permitted tokens, that `confidence` is in range and that no extra property was emitted. They deliberately do NOT assert which of SAME_KEY or NEW_KEY was chosen, because canary case obx-c-005 already grades that decision for correctness. A model that answers NEW_KEY here in perfectly valid JSON scores a pass on this case, and that is the intended division of labour rather than an oversight.",
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/idempotencyKeyStability.ts (scenario 11), plus the FORBIDDEN_IDENTITY_FIELDS list in packages/core/src/idempotency.ts",
+      "modifications": "The sibling drives a real retry under a second lease epoch and asserts that every invocation carried the same key, then asserts the key MOVES when the payload moves. Neither half is observable through a single completion, so the retry is described in the prompt instead of performed, and only the decision is asked for. The `maxLength` of 400 on `reason` is this project's: it bounds the reasoning-heavy archetype's output-token variance a little without changing the question."
+    },
+    "sourceTrace": {
+      "repo": "durable-agent-outbox",
+      "path": "packages/conformance/src/scenarios/idempotencyKeyStability.ts",
+      "symbol": "idempotencyKeyStability, scenario 11",
+      "carried": "The rule that a key is a function of WHAT the action is and never of how many times it has been tried is the sibling's, along with the observation that the benchmark's deliberately broken engine differed only by adding the epoch to the key. The JSON schema, the confidence field, the length bound and the archetype are this project's."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "One of the two structured cases that carry a boolean beside the enum, which is deliberate: a boolean is the field type a model is most likely to render as the string \"true\", and `additionalProperties: false` plus a typed boolean is what turns that into a schemaValid failure rather than a silent pass. This case exists so that `schemaValid` has something to vary on."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-s-002",
+    "split": "schema",
+    "archetype": "structured_json",
+    "title": "A nested count of side effects against a count of recorded deliveries.",
+    "promptId": "decide-v1",
+    "input": {
+      "system": "",
+      "user": "A message broker delivers one logical intent three times, with three different delivery ids, to an outbox that derives its external idempotency key from the intent rather than from the envelope. All three deliveries are processed to completion and none is dropped. Report how many times the external side effect should actually occur, and how many of the three deliveries should appear on the audit trail.",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "sideEffects": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "recordedDeliveries": { "type": "integer", "minimum": 0, "maximum": 3 }
+            },
+            "required": ["count", "recordedDeliveries"],
+            "additionalProperties": false
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "required": ["sideEffects", "confidence", "reason"],
+        "additionalProperties": false
+      },
+      "maxOutputTokens": 2048
+    },
+    "graders": [
+      { "kind": "jsonSchema" },
+      { "kind": "numericTolerance", "field": "sideEffects.count", "expected": 1, "tolerance": 0 },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["schemaValid", "quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/duplicateDelivery.ts (scenario 01), the ledger-length check rather than the rejection check",
+      "modifications": "The same question the corpus already asks as a bare digit in obx-x-003, re-asked as a nested object so that the answer has to be placed at a path rather than emitted alone. The second field, recordedDeliveries, is added because the sibling grades the liveness half too: an implementation that collapses three deliveries by acting on none of them is as wrong as one that acts three times, and a case that asked only for the side-effect count could not tell those apart."
+    },
+    "sourceTrace": {
+      "repo": "durable-agent-outbox",
+      "path": "packages/conformance/src/scenarios/duplicateDelivery.ts",
+      "symbol": "duplicateDelivery, scenario 01",
+      "carried": "The scenario, the three-delivery shape and the insistence that one is not zero are the sibling's. The nesting, the integer bounds and the decision to grade only `sideEffects.count` are this project's."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The one case in this split whose CORRECTNESS is graded, by a numericTolerance grader reading the dotted path `sideEffects.count` with a tolerance of zero. It is here so the split is not made entirely of cases that score shape and cost: a corpus that never checks an answer is a corpus a model can pass by emitting beautifully formed nonsense. Its twin obx-x-003 asks the same thing in the constrained_numeric archetype, so the pair also measures what the structured wrapper costs in tokens for an identical question."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-s-003",
+    "split": "schema",
+    "archetype": "structured_json",
+    "title": "A structured verdict on a correctly shaped receipt signed by the wrong key.",
+    "promptId": "decide-v1",
+    "input": {
+      "system": "",
+      "user": "A settlement feed hands an outbox a receipt for a payment that is currently IN_DOUBT. The receipt names the right action, carries the right idempotency key, is correct in every field, reports that the call did NOT land, and carries an observedAt earlier than any other receipt for that action. It is signed with a key the payment gateway does not use. Decide what the outbox should do with it, and list the properties of the receipt that decided your answer.",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "decision": { "type": "string", "enum": ["APPLY", "REJECT", "QUARANTINE_AND_WAIT"] },
+          "evidence": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 5,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["decision", "evidence", "confidence"],
+        "additionalProperties": false
+      },
+      "maxOutputTokens": 2048
+    },
+    "graders": [
+      { "kind": "jsonSchema" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["schemaValid", "outputTokens"],
+    "detectionLimit": "The array is checked for length, item type and item length. Its CONTENTS are free text and nothing here reads them, so a model that lists two irrelevant properties passes. Grading free text would need a model judge, and a drift detector that measures a model with a model has a moving ruler; that trade is refused here and the cost is written down instead of hidden.",
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/conformance/src/scenarios/forgedReceiptRefused.ts (scenario 16), both of its graded failures",
+      "modifications": "The sibling grades two distinct bugs separately: believing the forgery, and letting the forgery suppress the genuine settlement by being ordered before it. Only the first is answerable in one completion, so the earlier observedAt is stated in the prompt as a fact rather than exercised, and the case asks for the reasoning as an array so that a model that answered correctly while citing only the timestamp is at least visible in the recorded text."
+    },
+    "sourceTrace": {
+      "repo": "durable-agent-outbox",
+      "path": "packages/conformance/src/scenarios/forgedReceiptRefused.ts",
+      "symbol": "forgedReceiptRefused, scenario 16",
+      "carried": "The attack, the observation that authority which cannot be proved is authority anyone can claim, and the two-bugs-not-one framing are the sibling's. The array shape with minItems, the three-way decision enum and the choice not to grade the array contents are this project's."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The only case in the corpus whose schema requires an ARRAY with a minimum length, which is the constraint a model most often violates by returning a single string where a list was asked for. That failure mode is invisible to a quality score built on prose and is exactly what `schemaValid` is a gating metric for: a caller that does `evidence.map(...)` breaks the moment the provider starts returning a bare string, and no correctness grader would notice."
+  },
+  {
+    "schemaVersion": 1,
+    "id": "obx-s-004",
+    "split": "schema",
+    "archetype": "structured_json",
+    "title": "Classify one audit row, with a nullable violation code.",
+    "promptId": "decide-v1",
+    "input": {
+      "system": "",
+      "user": "An append-only audit trail for a payment action holds these rows in order: a creation row, READY to ATTEMPTING, ATTEMPTING to EXECUTED, EXECUTED to ACKED, and finally ACKED to REVOKED_BEFORE_EXECUTION, written when a cancellation arrived after the charge was already on the processor's books. Classify only that last row. Set violationCode to null if the row is legal.",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "legal": { "type": "boolean" },
+          "violationCode": {
+            "type": ["string", "null"],
+            "enum": [
+              "POST_EXECUTION_REVOCATION_AS_PRE",
+              "ILLEGAL_TRANSITION",
+              "PHANTOM_TRANSITION",
+              "TERMINAL_DISAGREEMENT",
+              "HEURISTIC_RESOLUTION",
+              null
+            ]
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 400 }
+        },
+        "required": ["legal", "violationCode", "confidence", "reason"],
+        "additionalProperties": false
+      },
+      "maxOutputTokens": 2048
+    },
+    "graders": [
+      { "kind": "jsonSchema" },
+      { "kind": "regex", "pattern": "^\\{[\\s\\S]*\"legal\"\\s*:\\s*false[\\s\\S]*\\}$" },
+      { "kind": "nonRefusal" }
+    ],
+    "requiredSignals": ["schemaValid", "quality"],
+    "detectionLimit": null,
+    "provenance": {
+      "kind": "derived",
+      "from": "durable-agent-outbox",
+      "ref": "packages/core/src/audit/legality.ts, the POST_EXECUTION_REVOCATION_AS_PRE violation code and the ACKED outgoing set in packages/core/src/transitions.ts",
+      "modifications": "The sibling runs this check over a whole trail and returns every violation. Here one row is presented in isolation and only its legality is asked for, so the sequence-monotonicity and phantom-transition halves of the checker are out of scope. The enum offers four decoy codes beside the right one, because an enum with a single member grades nothing: a hash is only meaningful once there is something it could have been instead."
+    },
+    "sourceTrace": {
+      "repo": "durable-agent-outbox",
+      "path": "packages/core/src/audit/legality.ts",
+      "symbol": "ViolationCode, and specifically POST_EXECUTION_REVOCATION_AS_PRE",
+      "carried": "The transition, the code names and the sibling's judgement that this row is a false statement about the physical world rather than a bookkeeping slip are the sibling's. The nullable union type, the decoy codes and the anchored regex grader on `legal` are this project's."
+    },
+    "authoredAt": "2026-08-26",
+    "note": "The only schema in the corpus with a UNION type, `[\"string\", \"null\"]`, and it earns its place: a nullable field is where a provider change shows up as the string \"null\" instead of the literal, which parses, reads correctly to a human, and breaks every caller doing a null check. The regex grader is anchored at both ends and runs beside the schema grader rather than instead of it, so the case scores the answer and the shape separately. Its canary twin obx-c-003 asks the same question in one word."
+  }
+]

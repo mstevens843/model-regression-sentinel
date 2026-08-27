@@ -21,7 +21,10 @@ const read = (split: string): FreezeRecord =>
   JSON.parse(readFileSync(`${REPO}corpus/${split}/FREEZE.json`, "utf8")) as FreezeRecord;
 
 describe("the shipped freeze records", () => {
-  for (const split of ["canary", "extended"]) {
+  // The schema split is included here from v0.2. Its record makes a WEAKER claim than the other
+  // two and still has to satisfy the same validator: a later addition is allowed to say it is a
+  // later addition, and is not allowed to be vaguer about it.
+  for (const split of ["canary", "extended", "schema"]) {
     it(`${split} is valid`, () => {
       const record = read(split);
       const violations = checkFreeze(record);

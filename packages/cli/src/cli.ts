@@ -10,7 +10,16 @@
 // up when the output is piped, which is exactly when it matters.
 
 import { UsageError, parseArgs } from "./args.js";
-import { USAGE, cmdCompare, cmdCorpus, cmdRun, cmdSchedule, cmdWatch } from "./commands.js";
+import {
+  USAGE,
+  cmdBaseline,
+  cmdCompare,
+  cmdCorpus,
+  cmdRun,
+  cmdSchedule,
+  cmdWatch,
+} from "./commands.js";
+import { cmdRelease } from "./release.js";
 
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
@@ -29,6 +38,10 @@ async function main(): Promise<number> {
       return cmdCompare(args);
     case "watch":
       return await cmdWatch(args);
+    case "baseline":
+      return cmdBaseline(args);
+    case "release":
+      return cmdRelease(args);
     case "schedule":
       return cmdSchedule(args);
     default:

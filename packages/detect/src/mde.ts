@@ -40,8 +40,14 @@ export interface MdeResult {
   /**
    * With every replicate passing, the largest true failure rate still consistent with the data.
    * The rule of three, and the honest floor no amount of testing at this n gets under.
+   *
+   * NULL, NOT NaN, for a continuous metric, where there is no "all passed" to bound. It was NaN in
+   * v0.1 and that was a real defect rather than a stylistic one: `canonicalJson` refuses NaN by
+   * design, because `JSON.stringify` would silently write `null` and let two different objects hash
+   * the same, so `--format json` threw on every comparison that reached a continuous metric. Null is
+   * both the honest value and the serializable one, and a test now asserts this field is never NaN.
    */
-  readonly allPassCeiling: number;
+  readonly allPassCeiling: number | null;
   /** Replicates needed to reach `targetEffect`, when the caller names one. */
   readonly replicatesForTarget: number | null;
   readonly targetEffect: number | null;
@@ -206,7 +212,7 @@ export function minimumDetectableRelativeEffect(
       cases: 0,
       replicates: 0,
       simulations: sims,
-      allPassCeiling: Number.NaN,
+      allPassCeiling: null,
       replicatesForTarget: null,
       targetEffect: options.targetEffect ?? null,
     };
@@ -250,10 +256,11 @@ export function minimumDetectableRelativeEffect(
     cases: usable.length,
     replicates,
     simulations: sims,
-    // Meaningless for a continuous metric: there is no "all passed" to bound. NaN rather than 0,
+    // Meaningless for a continuous metric: there is no "all passed" to bound. Null rather than 0,
     // because 0 would read as "an all-passing arm proves a zero failure rate", which is the exact
-    // misreading the rule of three exists to prevent.
-    allPassCeiling: Number.NaN,
+    // misreading the rule of three exists to prevent. And null rather than NaN, because NaN is not
+    // serializable under this project's canonical JSON and broke `--format json` once already.
+    allPassCeiling: null,
     replicatesForTarget: null,
     targetEffect: options.targetEffect ?? null,
   };

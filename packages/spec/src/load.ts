@@ -16,7 +16,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkCorpus, formatCorpusViolations } from "./corpus.js";
 import { SIDECARS } from "./manifest.js";
-import { type EvalCase, SentinelError, type Split } from "./types.js";
+import { ALL_SPLITS, type EvalCase, SentinelError, type Split } from "./types.js";
 
 /** Every case in one split directory, validated. Throws `corpus_invalid` if it is not usable. */
 export function loadSplit(dir: string, split: Split): readonly EvalCase[] {
@@ -54,7 +54,7 @@ export function loadSplit(dir: string, split: Split): readonly EvalCase[] {
 }
 
 /**
- * Both splits, together, for the whole-corpus checks.
+ * A named list of splits, together, with the corpus-wide checks run over the union.
  *
  * `checkCorpus` runs again over the union because two of its rules are corpus-level rather than
  * case-level: the archetype span, and the requirement that not every case declare a detectionLimit.
@@ -62,11 +62,8 @@ export function loadSplit(dir: string, split: Split): readonly EvalCase[] {
  * check by design, since it is deliberately all constrained cases so it stays cheap enough to run
  * on every tick.
  */
-export function loadCorpus(root: string): readonly EvalCase[] {
-  const all = [
-    ...loadSplit(join(root, "canary"), "canary"),
-    ...loadSplit(join(root, "extended"), "extended"),
-  ];
+export function loadSplits(root: string, splits: readonly Split[]): readonly EvalCase[] {
+  const all = splits.flatMap((s) => [...loadSplit(join(root, s), s)]);
   const violations = checkCorpus(all, "corpus");
   if (violations.length > 0) {
     throw new SentinelError(
@@ -75,6 +72,32 @@ export function loadCorpus(root: string): readonly EvalCase[] {
     );
   }
   return all;
+}
+
+/** Every split this version of the spec knows about. What `compare` runs against by default. */
+export function loadCorpus(root: string): readonly EvalCase[] {
+  return loadSplits(root, ALL_SPLITS);
+}
+
+/**
+ * EXACTLY the v0.1 pair, canary plus extended, and nothing else. Do not delete this.
+ *
+ * WHY IT EXISTS, in one sentence: `results/runs/baseline.json`, `candidate.json`,
+ * `confirmation.json` and `positive-control.json` were collected against those two splits and no
+ * other, at real cost, and each of them stores a `corpusDigest` computed over exactly those 24
+ * rendered requests.
+ *
+ * `compare` refuses to compare two runs whose `corpusDigest` differs, and it is right to: two runs
+ * of different corpora differ by experiment rather than by provider. So a `loadCorpus` that grew a
+ * third split would silently make every recorded run NOT_COMPARABLE, and the four runs cannot be
+ * recollected without paying for 960 more provider calls. Anything that reads those recorded runs -
+ * `scripts/calibrate.mjs`, `results/CALIBRATION.md`, the A/A false-positive study, the power curve -
+ * has to load the corpus through THIS function and not through `loadCorpus`.
+ *
+ * The digest it must produce is pinned by a test. See packages/run/test/corpusV1Digest.test.ts.
+ */
+export function loadV1Corpus(root: string): readonly EvalCase[] {
+  return loadSplits(root, ["canary", "extended"]);
 }
 
 /** The case files in a split directory, repo-root-relative, for manifest work. */

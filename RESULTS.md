@@ -13,6 +13,50 @@ environment**, so both BYOK HTTP providers are shipped and unrun.
 
 ---
 
+## v0.2, a hardening pass
+
+No new provider calls. The four recorded runs and the 960 calls behind them are byte-identical to
+v0.1, and `corpusDigestOf(loadV1Corpus(...))` still equals the digest recorded inside them. That
+mattered: expanding the corpus would otherwise have stranded the only real measured evidence this
+project has, and it cannot be recollected without spending again.
+
+| | v0.1 | v0.2 |
+|---|---|---|
+| tests | 267 | **532** |
+| detector mutants | 9 | **10** |
+| calibration scenarios | 11 | **12** |
+| frozen cases | 24 | **34**, across three splits |
+| generated blocks | 0 | **6**, plus the composition table |
+| exit codes | 3 | **4**, splitting misuse from could-not-look |
+| real provider calls | 960 | **960**, unchanged |
+
+**What changed, in one line each.**
+
+- **The watcher is honest about its own dullness.** `sentinel watch --status` reports how much more
+  evidence it now needs than a fresh watch, and `sentinel baseline rotate` is the only route to
+  clearing that, requiring a newly collected artifact and refusing four ways. `watch --init` refuses
+  to overwrite an existing watch, because deleting a state file was a silent reset.
+- **Provider metadata drift is a separate category from quality drift.** Two absences no longer
+  compare as an agreement.
+- **`NO_DRIFT` is structurally reachable.** `schemaValid` went from 2 cases to 12; at k=2 the
+  sign-flip test's smallest attainable p is 0.25, so no effect of any size could ever resolve.
+  Whether it is reachable against a real provider is a question about data, and answering it needs a
+  collection this pass did not authorise.
+- **Release verification cannot mislead a stranger.** A bare `sentinel release verify` defaults to
+  `dist/release` and refuses rather than scanning `.`, because a verifier pointed at the wrong place
+  reports every artifact of a complete release as absent, which reads as a broken release.
+- **`pnpm release` now refuses to publish.** The machine that built this has an authenticated
+  `~/.npmrc` and all seven names are unclaimed, so the manifest no longer carries a command that
+  could publish seven README-less packages by autocomplete.
+
+**Eight defects found and fixed**, listed with their consequences in
+[docs/DEFECTS_FOUND.md](docs/DEFECTS_FOUND.md). The one worth reading is the third recurrence of a
+NaN reaching canonical JSON: `calibratedP` and `noiseFloor95` were NaN whenever the baseline was too
+thin to calibrate, so `compare --format json` threw on any run with fewer than four replicates,
+which is exactly the underpowered run a user is most likely to be inspecting. Found by an
+adversarial sweep, not by reading. The rule is now written down and swept:
+**anything crossing a serialization boundary must be finite or null.**
+
 ## Summary
 
 | Gate | Result |
@@ -251,6 +295,18 @@ rewriting a recorded output to satisfy a style rule would falsify the measuremen
 scoped to that one directory and a second test asserts the directory still holds recorded runs, so
 the exclusion cannot quietly become a blanket.
 
+## Corpus freeze status
+
+<!-- GENERATED:freeze-status -->
+| split | cases | frozen | ordering proof | commit |
+|---|---|---|---|---|
+| `canary` | 8 | 2026-08-26 | **unavailable** | none recorded |
+| `extended` | 16 | 2026-08-26 | **unavailable** | none recorded |
+| `schema` | 10 | 2026-08-26 | **unavailable** | none recorded |
+
+**No split has a cashed ordering proof, and `pnpm verify:freeze` exits 1 by design.** The corpus could not be committed before the detector existed in the environment that produced this repository, so the state is UNAVAILABLE rather than pending. That is a claim about what is obtainable here, not about work still to do.
+<!-- /GENERATED -->
+
 ## Still unproven, stated plainly
 
 | Gap | Status |
@@ -271,7 +327,7 @@ pnpm install --frozen-lockfile
 pnpm lint && pnpm typecheck && pnpm build && pnpm test
 
 pnpm audit:release                 # every gate, plus two negative controls that must fire
-pnpm verify:corpus                 # byte integrity, 24 cases
+pnpm verify:corpus                 # byte integrity, 34 cases across three splits
 shasum -a 256 -c corpus/canary/MANIFEST.sha256    # the same check, no code from here
 pnpm verify:freeze                 # EXPECTED to exit 1. See "Still unproven".
 

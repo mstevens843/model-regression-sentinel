@@ -354,3 +354,98 @@ export const cusumVerdict = (
   signalled: state.cusum >= config.cusumThreshold,
   changepoint: state.cusum >= config.cusumThreshold ? state.cusumStartedAt : null,
 });
+
+// ---- the rebaseline ladder ------------------------------------------------------------------------
+
+/**
+ * How much sensitivity a watch has spent, as a graded judgement rather than a raw number.
+ *
+ * `evidenceMultiple` is the honest quantity and it is also uninterpretable on its own: nobody can
+ * say from 8.9 whether to act. This ladder turns it into three states with one action each, which is
+ * the whole content of the "rebaseline protocol" and the reason it is code rather than a paragraph
+ * in a document nobody opens.
+ *
+ *   `healthy`   under 2x. The watch needs about as much evidence as a fresh one.
+ *   `degraded`  2x to the configured threshold. Still working, measurably slower, worth watching.
+ *   `blind`     at or past the threshold. Rotate. A real regression will take multiples longer to
+ *               surface than the operator has any reason to expect.
+ *
+ * THE STATE IS NOT AN ALARM. A blind watch is not evidence that anything drifted, and it must never
+ * set a regression exit code. It is a maintenance signal, and conflating the two would be the same
+ * category error this project spends its whole design avoiding.
+ */
+export type SensitivityState = "healthy" | "degraded" | "blind";
+
+export interface RebaselineAdvice {
+  readonly state: SensitivityState;
+  readonly evidenceMultiple: number;
+  readonly sensitivityDebt: number;
+  readonly threshold: number;
+  /** True exactly when `state` is "blind". Kept as its own field so a report cannot drift from it. */
+  readonly needsRebaseline: boolean;
+  /** One line an operator can act on. */
+  readonly action: string;
+  /** What to look at BEFORE rotating, because rotating first destroys the evidence. */
+  readonly inspectFirst: readonly string[];
+}
+
+/** Below this multiple a watch is treated as fresh. Two is the point where evidence has doubled. */
+export const HEALTHY_MULTIPLE = 2;
+
+export function rebaselineAdvice(
+  state: EProcessState,
+  config: EProcessConfig = DEFAULT_ECONFIG,
+): RebaselineAdvice {
+  const multiple = evidenceMultiple(state, config);
+  const threshold = config.rebaselineEvidenceMultiple;
+  const level: SensitivityState =
+    multiple >= threshold ? "blind" : multiple >= HEALTHY_MULTIPLE ? "degraded" : "healthy";
+
+  // THE ORDER MATTERS. Every one of these is a thing that a rotation would erase, and the reason a
+  // rotation is a deliberate command rather than something the watcher does for itself.
+  const inspectFirst =
+    level === "healthy"
+      ? []
+      : [
+          "the alarm history: a case that alarmed and settled is evidence a rotation discards",
+          "the identity alerts: if the provider identity moved, the baseline is stale for a reason that is not time",
+          "the baseline's own age, via assessStaleness: a blind watch and an aged baseline are usually the same fact",
+          "whether the baseline was thin: p0 is a Wilson lower bound, so a small baseline bleeds faster and a bigger one is the cure rather than a fresh copy of the same size",
+        ];
+
+  const action =
+    level === "healthy"
+      ? "none. This watch is about as sensitive as a fresh one."
+      : level === "degraded"
+        ? `none yet. This watch needs about ${multiple.toFixed(1)}x the evidence a fresh one would, which is measurable and not yet actionable. Plan a rotation before it reaches ${threshold}x.`
+        : `ROTATE. This watch needs about ${multiple.toFixed(1)}x the evidence a fresh one would, so a real regression will take that much longer to surface. Collect a new baseline and run \`sentinel baseline rotate\`. Do not simply delete the state file: that erases the record without fixing the cause.`;
+
+  return {
+    state: level,
+    evidenceMultiple: multiple,
+    sensitivityDebt: sensitivityDebt(state),
+    threshold,
+    needsRebaseline: level === "blind",
+    action,
+    inspectFirst,
+  };
+}
+
+/**
+ * The worst advice across a set of cases, which is what a suite-level report should show.
+ *
+ * Worst rather than mean, because a watch is only as sensitive as the case that has to catch the
+ * regression, and averaging a blind case against nine healthy ones produces a number that describes
+ * no case in the watch.
+ */
+export function worstAdvice(
+  states: readonly EProcessState[],
+  config: EProcessConfig = DEFAULT_ECONFIG,
+): RebaselineAdvice | null {
+  let worst: RebaselineAdvice | null = null;
+  for (const state of states) {
+    const advice = rebaselineAdvice(state, config);
+    if (worst === null || advice.evidenceMultiple > worst.evidenceMultiple) worst = advice;
+  }
+  return worst;
+}

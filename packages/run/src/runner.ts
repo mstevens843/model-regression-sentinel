@@ -34,8 +34,19 @@ import {
 } from "@model-regression-sentinel/spec";
 import { type CostBounds, summariseCost } from "./cost.js";
 import { type ProviderFingerprint, fingerprintOf } from "./fingerprint.js";
+import { type ProviderMetadata, type TokenSource, metadataOf } from "./metadata.js";
 import { requestKey } from "./providers/replay.js";
 import type { CompletionRequest, Provider, ProviderResponse } from "./types.js";
+
+/**
+ * The version of the adapters in THIS repository.
+ *
+ * Recorded on every run because a rewritten adapter can change what the numbers mean while the
+ * provider holds perfectly still: a different flag set, a different field read for the served model,
+ * a different place the token counts come from. A comparison that spans an adapter change is not
+ * measuring only the provider, and this is what makes that visible.
+ */
+export const ADAPTER_VERSION = "0.2.0";
 
 /** Turn a case plus its versioned prompt into the exact request that will be issued. */
 export function renderRequest(evalCase: EvalCase): CompletionRequest {
@@ -81,6 +92,16 @@ export interface RunSnapshot {
   readonly corpusDigest: string;
   /** Null when every call failed, so no identity was ever observed. */
   readonly fingerprint: ProviderFingerprint | null;
+  /**
+   * The fuller provider metadata: endpoint, adapter, harness version, token source.
+   *
+   * OPTIONAL, and that is load-bearing rather than lazy. Four real runs were recorded in v0.1 before
+   * this existed, they cost real money, and they are the project's only measured evidence. A
+   * required field would make them unreadable and unrecollectable. Absent metadata is read as
+   * `unknown` throughout, which is the true statement about those files and is exactly why
+   * `MetaValue` distinguishes unknown from not-exposed.
+   */
+  readonly metadata?: ProviderMetadata;
   readonly records: readonly RunRecord[];
   readonly errorCount: number;
   readonly cost: CostBounds;
@@ -88,6 +109,10 @@ export interface RunSnapshot {
 
 export interface RunOptions {
   readonly replicates: number;
+  /** Where the token counts come from. Recorded so a comparison cannot cross that boundary blind. */
+  readonly tokenSource?: TokenSource;
+  readonly endpoint?: string;
+  readonly harnessVersion?: string;
   readonly concurrency?: number;
   readonly label?: string;
   /** Injected so a snapshot's timestamp is data rather than a hidden clock read. */
@@ -168,6 +193,24 @@ export async function runCorpus(
     corpusDigest: corpusDigestOf(ordered),
     fingerprint:
       first === undefined ? null : fingerprintOf(provider.name, provider.model, first.response),
+    ...(first === undefined
+      ? {}
+      : {
+          metadata: metadataOf({
+            provider: provider.name,
+            requestedModel: provider.model,
+            response: first.response,
+            tokenSource: provider.tokenSource ?? options.tokenSource ?? "none",
+            observedAt: now().toISOString(),
+            ...((provider.endpoint ?? options.endpoint) === undefined
+              ? {}
+              : { endpoint: (provider.endpoint ?? options.endpoint) as string }),
+            ...((provider.harnessVersion ?? options.harnessVersion) === undefined
+              ? {}
+              : { harnessVersion: (provider.harnessVersion ?? options.harnessVersion) as string }),
+            adapterVersion: ADAPTER_VERSION,
+          }),
+        }),
     records,
     errorCount: records.length - ok.length,
     cost: summariseCost(

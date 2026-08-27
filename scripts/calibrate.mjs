@@ -56,10 +56,13 @@ const TRIALS = Number(arg("trials", "40"));
 const OUT = join(ROOT, arg("out", "results"));
 const RUNS = join(ROOT, "results", "runs");
 
-const cases = [
-  ...spec.loadSplit(join(ROOT, "corpus/canary"), "canary"),
-  ...spec.loadSplit(join(ROOT, "corpus/extended"), "extended"),
-];
+// THE v0.1 PAIR, DELIBERATELY, AND NOT `loadCorpus`. The four runs under results/runs/ were
+// collected against canary plus extended and carry a corpusDigest over exactly those 24 rendered
+// requests. `compare` refuses two runs whose digests differ, so calibrating against the v0.2 corpus
+// would compare recorded outputs to cases that were never called: every A/A split would come back
+// NOT_COMPARABLE and the false-positive rate would be measured over nothing. The digest is pinned in
+// packages/run/test/corpusV1Digest.test.ts.
+const cases = spec.loadV1Corpus(join(ROOT, "corpus"));
 const baseline = baselinePkg.readSnapshot(join(RUNS, "baseline.json"));
 const candidate = baselinePkg.readSnapshot(join(RUNS, "candidate.json"));
 

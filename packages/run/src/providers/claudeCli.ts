@@ -72,6 +72,8 @@ interface CliResult {
 
 export interface ClaudeCliOptions {
   readonly binary?: string;
+  /** `claude --version`, when a caller has looked it up. Absent stays `unknown`, never a guess. */
+  readonly harnessVersion?: string;
   readonly timeoutMs?: number;
   /** Injected so tests can drive the provider without a subprocess. */
   readonly exec?: (
@@ -91,6 +93,9 @@ export interface ExecResult {
 export class ClaudeCliProvider implements Provider {
   readonly name: string;
   readonly model: string;
+  readonly endpoint = "cli";
+  readonly tokenSource = "cli_usage" as const;
+  readonly harnessVersion: string | undefined;
   private readonly binary: string;
   private readonly timeoutMs: number;
   private readonly exec: (
@@ -104,6 +109,7 @@ export class ClaudeCliProvider implements Provider {
     this.model = model;
     this.binary = options.binary ?? "claude";
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.harnessVersion = options.harnessVersion;
     this.exec = options.exec ?? runSubprocess;
   }
 

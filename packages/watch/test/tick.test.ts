@@ -40,6 +40,11 @@ import {
   synthSnapshot,
 } from "@model-regression-sentinel/detect";
 import type { RunSnapshot } from "@model-regression-sentinel/run";
+// v0.2 split the exit-code contract. `could_not_look` used to share code 2 with every kind of
+// misuse, and it is not misuse: the invocation was fine and the provider would not answer. It is now
+// EXIT_COULD_NOT_LOOK (3), so a pipeline can page an on-call for an outage and open a ticket for a
+// typo without parsing prose. Neither is 1, because neither is evidence the provider got worse.
+import { EXIT_COULD_NOT_LOOK } from "@model-regression-sentinel/spec";
 import { describe, expect, it } from "vitest";
 import { initWatchFile } from "../src/state.js";
 import { tick, tickExitCode } from "../src/tick.js";
@@ -94,14 +99,14 @@ describe("a watcher that could not look never reports that nothing changed", () 
     expect(result.note).toContain("this tick saw nothing at all, and those are opposite claims");
   });
 
-  it("exits 2 on it, because fix the watcher and investigate the provider are opposite instructions", () => {
+  it("exits 3 on it, because fix the watcher and investigate the provider are opposite instructions", () => {
     const result = tick({
       file: WATCH,
       cases: EVAL_CASES,
       snapshot: unreachable(quietRound(9)),
       now: at(1),
     });
-    expect(tickExitCode(result)).toBe(2);
+    expect(tickExitCode(result)).toBe(EXIT_COULD_NOT_LOOK);
   });
 
   it("leaves the accumulated wealth exactly where it was, rather than nudging it with zeros", () => {
@@ -131,7 +136,7 @@ describe("a watcher that could not look never reports that nothing changed", () 
     });
     const result = tick({ file: WATCH, cases: EVAL_CASES, snapshot: elsewhere, now: at(1) });
     expect(result.status).toBe("could_not_look");
-    expect(tickExitCode(result)).toBe(2);
+    expect(tickExitCode(result)).toBe(EXIT_COULD_NOT_LOOK);
     expect(result.note).toContain("a look at a different question");
   });
 

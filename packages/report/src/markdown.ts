@@ -156,7 +156,9 @@ interface Ceiling {
 function ceilingOf(result: CompareResult): Ceiling {
   for (const finding of result.findings) {
     const mde = finding.mde;
-    if (mde !== null) {
+    // A continuous metric's MDE carries a null ceiling, because there is no "all passed" to bound.
+    // Skip to a binary metric that has one rather than reporting an absence as a number.
+    if (mde !== null && mde.allPassCeiling !== null) {
       return { value: mde.allPassCeiling, replicates: mde.replicates, source: "mde" };
     }
   }

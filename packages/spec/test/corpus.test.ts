@@ -6,7 +6,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { checkCorpus, formatCorpusViolations, producibleSignals } from "../src/corpus.js";
-import { loadCorpus, loadSplit } from "../src/load.js";
+import { loadCorpus, loadSplit, loadV1Corpus } from "../src/load.js";
 import { REGISTRY } from "../src/prompts.js";
 import { ALL_ARCHETYPES, type EvalCase } from "../src/types.js";
 
@@ -22,7 +22,17 @@ describe("the frozen corpus", () => {
   it("holds the case counts its freeze records claim", () => {
     expect(loadSplit(`${ROOT}canary`, "canary").length).toBe(8);
     expect(loadSplit(`${ROOT}extended`, "extended").length).toBe(16);
-    expect(all.length).toBe(24);
+    expect(loadSplit(`${ROOT}schema`, "schema").length).toBe(10);
+    expect(all.length).toBe(34);
+  });
+
+  it("keeps the v0.1 pair loadable on its own, because four recorded runs depend on it", () => {
+    // `results/runs/*.json` were collected against canary plus extended and carry a corpusDigest
+    // over exactly those 24 cases. The digest itself is pinned in packages/run, which is where
+    // `corpusDigestOf` lives; this asserts the membership the digest is taken over.
+    const v1 = loadV1Corpus(ROOT);
+    expect(v1.length).toBe(24);
+    expect(v1.some((c) => c.split === "schema")).toBe(false);
   });
 
   it("spans every measured noise regime", () => {
