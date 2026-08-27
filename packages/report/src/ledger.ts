@@ -48,7 +48,9 @@ import {
   asP,
   asPercent,
   asPointsMagnitude,
+  asRelativeMagnitude,
   effectOf,
+  mdeMagnitudeOf,
   noiseFloorOf,
   renderTable,
   wrap,
@@ -110,6 +112,7 @@ export function gatesFor(result: CompareResult): readonly GateRow[] {
     rows.push(metricRow(metric, byMetric.get(metric), result, comparable));
   }
 
+  rows.push(coverageRow(result));
   rows.push(identityRow(result));
   rows.push(powerRow(result, comparable));
   return rows;
@@ -196,7 +199,7 @@ function metricRow(
   return {
     ...base,
     status: "PASS",
-    detail: `no move; a ${asPointsMagnitude(mde.mde)} drop would have been caught ${asPercent(mde.power)} of the time`,
+    detail: `no move; a ${mdeMagnitudeOf(finding)} drop would have been caught ${asPercent(mde.power)} of the time`,
   };
 }
 
@@ -208,7 +211,47 @@ function metricRow(
  * build on it would make a re-tag indistinguishable from a regression, which is the confusion the
  * whole fingerprint module exists to prevent.
  */
+/**
+ * Cases loaded but never run, which nothing else in the report mentions.
+ *
+ * The default invocation produces this: `--split both` loads all 34 cases and the recorded runs
+ * carry 24, so ten schema cases are loaded and contribute nothing. Reported as SKIPPED rather than
+ * NOT RUN, because SKIPPED means "deliberately declined, never measured" and that is exactly what
+ * it is - the cases were not collected, which is a decision about the runs and not a failure.
+ */
+function coverageRow(result: CompareResult): GateRow {
+  const missing = result.casesNotInEitherArm;
+  if (missing.length === 0) {
+    return {
+      area: AREA_COMPARABILITY,
+      name: "case coverage",
+      status: "PASS",
+      detail: "every case loaded from the corpus produced records in both arms",
+    };
+  }
+  const shown = missing.slice(0, 3).join(", ");
+  return {
+    area: AREA_COMPARABILITY,
+    name: "case coverage",
+    status: "SKIPPED",
+    detail: `${missing.length} loaded case(s) produced no records in either arm and were therefore never measured: ${shown}${missing.length > 3 ? ", ..." : ""}. These runs were collected against a smaller corpus than the one loaded.`,
+  };
+}
+
 function identityRow(result: CompareResult): GateRow {
+  // NOT RUN before PASS. An empty change list means "every field held" only when both arms actually
+  // observed an identity; when one of them never did, the same empty list means "there was nothing
+  // to compare", and printing that as a PASS is the not-measured/measured-clean conflation this
+  // ledger exists to prevent.
+  if (!result.identityComparable) {
+    return {
+      area: AREA_IDENTITY,
+      name: "fingerprint",
+      status: "NOT RUN",
+      detail:
+        "at least one arm never observed a provider identity, so no fingerprint field could be compared. This is not evidence that the identity held.",
+    };
+  }
   if (result.identityChanges.length === 0) {
     return {
       area: AREA_IDENTITY,
@@ -245,12 +288,27 @@ function powerRow(result: CompareResult, comparable: boolean): GateRow {
       detail: `${result.underpoweredMetrics.length} gating metric(s) had no resolvable MDE: ${result.underpoweredMetrics.join(", ")}`,
     };
   }
-  const resolved = withMde.map((f) => f.mde?.mde ?? Number.NaN).filter((v) => Number.isFinite(v));
-  const worst = resolved.length === 0 ? Number.NaN : Math.max(...resolved);
+  // ONE MAXIMUM PER UNIT, because there is no such thing as the larger of "6 percentage points" and
+  // "0.08 of a baseline". This took `Math.max` across both kinds and printed the winner as "pp".
+  const worstOf = (binary: boolean): number | null => {
+    const vs = withMde
+      .filter((f) => f.binary === binary)
+      .map((f) => f.mde?.mde ?? Number.NaN)
+      .filter((v) => Number.isFinite(v));
+    return vs.length === 0 ? null : Math.max(...vs);
+  };
+  const worstBinary = worstOf(true);
+  const worstRelative = worstOf(false);
+  const widest = [
+    worstBinary === null ? null : `${asPointsMagnitude(worstBinary)} on the rate metrics`,
+    worstRelative === null ? null : `${asRelativeMagnitude(worstRelative)} on the continuous ones`,
+  ]
+    .filter((x): x is string => x !== null)
+    .join(", ");
   return {
     ...base,
     status: "PASS",
-    detail: `every gating metric resolved an MDE; the widest is ${asPointsMagnitude(worst)}`,
+    detail: `every gating metric resolved an MDE; the widest is ${widest === "" ? "not measured" : widest}`,
   };
 }
 
@@ -273,7 +331,16 @@ export function exitCodeFromGates(
   return 0;
 }
 
-export function renderGates(rows: readonly GateRow[]): string {
+/**
+ * `gate` is a parameter because the footer states an exit code, and a stated exit code has to be
+ * the one the process will return. This hardcoded "confirmed", so a run under `--gate suspected`
+ * printed "exit 0 under the default gate" in the one place a reader looks to find out what the run
+ * decided, while the process exited 1.
+ */
+export function renderGates(
+  rows: readonly GateRow[],
+  gate: "confirmed" | "suspected" = "confirmed",
+): string {
   const lines: string[] = ["drift gates", RULE];
   lines.push(
     ...renderTable(
@@ -304,10 +371,14 @@ export function renderGates(rows: readonly GateRow[]): string {
   }
 
   lines.push(RULE);
-  const code = exitCodeFromGates(rows, "confirmed");
+  const code = exitCodeFromGates(rows, gate);
+  const gateSentence =
+    gate === "suspected"
+      ? "under --gate suspected, which you asked for: a SUSPECTED finding fails the build here, where by default it would not."
+      : "under the default gate. A non-zero exit requires a CONFIRMED regression, so a suspected finding is a FLAG and returns zero.";
   lines.push(
     ...wrap(
-      `exit ${code} under the default gate. A non-zero exit requires a CONFIRMED regression, so a suspected finding is a FLAG and returns zero. NOT RUN is not a pass: a ledger with no FAIL in it says only that every gate this run MEASURED was clean.`,
+      `exit ${code} ${gateSentence} NOT RUN is not a pass: a ledger with no FAIL in it says only that every gate this run MEASURED was clean.`,
       RULE_WIDTH,
       "  ",
     ),

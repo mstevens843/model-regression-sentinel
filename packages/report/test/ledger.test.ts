@@ -95,7 +95,7 @@ describe("the printed ledger and the exit code are the same decision", () => {
   it("spans four verdicts, so the sweep below is a sweep and not four copies of one branch", () => {
     // The self-check. Two implementations of one decision agree trivially on a single input.
     expect([...RESULTS].map(([name, r]) => `${name}=${r.verdict}`)).toEqual([
-      "A/A=INCONCLUSIVE",
+      "A/A=NO_DRIFT",
       "drift=SUSPECTED_DRIFT",
       "confirmed=CONFIRMED_DRIFT",
       "mismatch=NOT_COMPARABLE",

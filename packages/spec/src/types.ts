@@ -142,6 +142,38 @@ export const ALL_METRICS: readonly MetricKey[] = [
  * counts and the rate card, so gating on it double-counts `outputTokens` and additionally fires
  * whenever a vendor reprices, which is not drift.
  */
+/**
+ * WHICH DIRECTION IS THE BAD ONE, per metric.
+ *
+ * For `quality` and `schemaValid`, degradation is a FALL: fewer correct answers, fewer valid
+ * documents. For `refusal` it is a RISE - a model that starts declining a prompt it used to answer
+ * has drifted, and a model that refuses LESS has not got worse.
+ *
+ * THIS MAP EXISTS BECAUSE ITS ABSENCE HAD A MEASURABLE COST. The power simulator searched a drop for
+ * every binary metric, including `refusal`. On any healthy corpus the refusal rate is 0, so there is
+ * nothing to drop, and the simulated power came back FLAT at about 33 percent for every effect size
+ * on the grid - never reaching the 80 percent target, so the MDE resolved to null at every size.
+ * Measured, 12 cases at 10 replicates, all-zero refusals:
+ *
+ *     effect      5pt    10pt   20pt   40pt   60pt
+ *     drop       .330   .330   .330   .330   .330      <- what was searched. Never resolves.
+ *     rise       .195   .600   .980  1.000  1.000      <- the direction that means drift.
+ *
+ * A gating metric whose MDE can never resolve makes `NO_DRIFT` structurally unreachable, and this
+ * one did so on EVERY corpus rather than only on the one short of schema cases. The documentation
+ * blamed `schemaValid` alone, which was half the reason and the half that a bigger corpus fixes.
+ */
+export const DEGRADATION_DIRECTION: Readonly<Record<MetricKey, "drop" | "rise">> = {
+  quality: "drop",
+  schemaValid: "drop",
+  refusal: "rise",
+  // Continuous metrics are compared two-sided and never use this; listed so the record is total and
+  // a new metric cannot be added without deciding.
+  outputTokens: "rise",
+  latencyMs: "rise",
+  costUsd: "rise",
+};
+
 export const GATING_METRICS: readonly MetricKey[] = [
   "quality",
   "schemaValid",

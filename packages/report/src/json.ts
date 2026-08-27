@@ -54,7 +54,25 @@ export function renderJson(result: CompareResult, options: JsonOptions = {}): st
     reason: result.reason,
     exitCode: exitCodeFor(result, "confirmed"),
     exitCodeUnderSuspectedGate: exitCodeFor(result, "suspected"),
-    alpha: result.alpha,
+    // finite(), like every other number crossing this boundary. It was the one top-level value that
+    // was not, so `compare --alpha bogus --format json` threw `NaN has no JSON representation` from
+    // a message that never named the flag - while the same input under --format text printed the
+    // string "NaN" and exited 0. Two output modes disagreeing about whether a run was valid.
+    alpha: finite(result.alpha),
+    // The machine-readable half of the INCONCLUSIVE distinction. A pipeline must be able to tell
+    // "underpowered" from "an arm never reached the provider" without parsing prose.
+    couldNotLook: result.couldNotLook ?? null,
+    identityComparable: result.identityComparable,
+    // Rendered here for the same reason it is rendered in the terminal: an absence on one side and
+    // an absence on the other are two absences. This was text-only, so the output a pipeline parses
+    // dropped the whole category.
+    metadataChanges: result.metadataChanges.map((c) => ({
+      field: c.field,
+      kind: c.kind,
+      before: c.before,
+      after: c.after,
+      note: c.note ?? null,
+    })),
     arms: {
       baseline: {
         label: result.baselineLabel,
@@ -166,10 +184,26 @@ function findingJson(finding: MetricFinding): unknown {
     // or costUsd, which is every comparison of two real runs. The type now carries `number | null`
     // so the fix lives at the source rather than at this boundary, and `finite` is kept here anyway
     // because a boundary that assumes its input is clean is a boundary that stops being a boundary.
+    // THE SPREAD WAS THE BUG, and guarding one field of six left it. `{ ...finding.mde }` carries
+    // `mde`, `power`, `alpha`, `targetPower`, `targetEffect` and `replicatesForTarget` through
+    // untouched, so `--target-effect bogus --format json` still died with
+    // `NaN has no JSON representation` from a message that named neither the flag nor the field.
+    // Every number is named and guarded, which is what the comment above already claimed.
     mde:
       finding.mde === null
         ? null
-        : { ...finding.mde, allPassCeiling: nullableFinite(finding.mde.allPassCeiling) },
+        : {
+            mde: nullableFinite(finding.mde.mde),
+            power: finite(finding.mde.power),
+            alpha: finite(finding.mde.alpha),
+            targetPower: finite(finding.mde.targetPower),
+            cases: finding.mde.cases,
+            replicates: finding.mde.replicates,
+            simulations: finding.mde.simulations,
+            allPassCeiling: nullableFinite(finding.mde.allPassCeiling),
+            replicatesForTarget: finding.mde.replicatesForTarget,
+            targetEffect: nullableFinite(finding.mde.targetEffect),
+          },
     perCase: finding.perCase.map((c) => ({
       caseId: c.caseId,
       baseline: finite(c.baseline),
@@ -204,11 +238,11 @@ function powerJson(result: CompareResult): unknown {
       return {
         metric: f.metric,
         gating: f.gating,
-        mde: mde === null ? null : mde.mde,
+        mde: mde === null ? null : nullableFinite(mde.mde),
         power: mde === null ? null : finite(mde.power),
         alpha: mde === null ? null : finite(mde.alpha),
         targetPower: mde === null ? null : finite(mde.targetPower),
-        targetEffect: mde === null ? null : mde.targetEffect,
+        targetEffect: mde === null ? null : nullableFinite(mde.targetEffect),
         replicatesForTarget: mde === null ? null : mde.replicatesForTarget,
         cases: mde === null ? null : mde.cases,
         replicates: mde === null ? null : mde.replicates,

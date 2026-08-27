@@ -26,7 +26,7 @@
 
 import { signFlipTest } from "./permutation.js";
 import { type Rng, binomial, mulberry32 } from "./rng.js";
-import { ruleOfThree } from "./stats.js";
+import { ruleOfThree, symmetricRelative } from "./stats.js";
 
 export interface MdeResult {
   /** Smallest drop in mean pass rate detectable at the target power, or null if none was found. */
@@ -64,6 +64,11 @@ export interface MdeOptions {
   readonly targetEffect?: number;
   /** Candidate effect sizes to search, in rate points. */
   readonly grid?: readonly number[];
+  /**
+   * Which direction counts as degradation for this metric. See `DEGRADATION_DIRECTION` in
+   * @model-regression-sentinel/spec for the measurement behind it.
+   */
+  readonly direction?: "drop" | "rise";
 }
 
 const DEFAULT_GRID = [
@@ -99,7 +104,12 @@ export function simulatePower(
   for (let s = 0; s < sims; s += 1) {
     const deltas: number[] = [];
     for (const p of baselineRates) {
-      const candidateP = Math.min(1, Math.max(0, p - effect));
+      // A metric whose bad direction is a RISE cannot be simulated by subtracting: at a baseline
+      // rate of 0 there is nothing to subtract, and the power came back flat at every effect size.
+      const candidateP =
+        options.direction === "rise"
+          ? Math.min(1, Math.max(0, p + effect))
+          : Math.min(1, Math.max(0, p - effect));
       const b = binomial(rng, replicates, p) / replicates;
       const c = binomial(rng, replicates, candidateP) / replicates;
       deltas.push(c - b);
@@ -230,8 +240,26 @@ export function minimumDetectableRelativeEffect(
           a += values[Math.floor(rng() * values.length)] as number;
           b += (values[Math.floor(rng() * values.length)] as number) * (1 + effect);
         }
-        const mb = a / replicates;
-        deltas.push(mb === 0 ? 0 : (b / replicates - mb) / mb);
+        // THE SAME STATISTIC THE DETECTOR USES, and that is the entire argument. This computed
+        // `(c - b) / b` while `compare` had moved to the symmetric form, so the simulator reported
+        // the power of a detector that does not exist.
+        //
+        // THE CORRECTION MADE THE REPORTED MDE WORSE, WHICH IS THE POINT. The expectation going in
+        // was that removing the unbounded form would tighten the estimate, because on the bimodal
+        // case a resample of a true +8 percent shift reaches a delta of 9.6 under the naive form
+        // against 1.66 under this one. Measured on the recorded baseline, 24 cases of outputTokens,
+        // 300 sims per point, it goes the other way:
+        //
+        //     injected shift    2%     4%     6%     8%    10%    15%    20%
+        //     naive  (old)    .330   .557   .747   .830   .913   .990  1.000
+        //     symmetric(new)  .300   .500   .660   .770   .827   .933   .970
+        //
+        // so the reported MDE for outputTokens moves from 8 percent to 10 percent. The old number
+        // was not a tighter estimate of the same thing, it was an estimate of a different and more
+        // sensitive statistic than the one the detector tests. A tool that reports it can resolve an
+        // 8 percent shift while actually resolving 10 is overclaiming its own sensitivity, and
+        // overclaiming sensitivity is how a null result gets read as evidence of no change.
+        deltas.push(symmetricRelative(b / replicates, a / replicates));
       }
       if (signFlipTest(deltas, { rng, draws, forceMonteCarlo: true }).p <= alpha) rejected += 1;
     }

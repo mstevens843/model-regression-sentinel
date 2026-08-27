@@ -87,7 +87,7 @@ function snapshot(perCase: ReadonlyMap<string, number>, replicates: number): Run
     capturedAt: "2026-08-26T00:00:00.000Z",
     provider: "fixture",
     requestedModel: "fixture-alias",
-    split: "canary",
+    splits: ["canary"],
     replicates,
     concurrency: 1,
     caseIds: [...perCase.keys()].sort(),

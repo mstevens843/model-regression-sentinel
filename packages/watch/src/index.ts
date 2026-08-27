@@ -26,6 +26,7 @@ export {
   planRotation,
   rotationRecord,
   worstMultiple,
+  ROTATION_REASONS,
 } from "./lineage.js";
 export { debtReport, renderDebt } from "./debt.js";
 export type { Confirmation, IdentityAlert, InitWatchInput, WatchFile } from "./state.js";

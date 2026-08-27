@@ -55,6 +55,13 @@ else
   bad "docs/CORPUS.md and the corpus disagree; run pnpm docs:composition"
 fi
 
+step "3c. every generated block matches the artifact it describes"
+if node scripts/generated-blocks.mjs --check >/dev/null 2>&1; then
+  pass "generated blocks are current"
+else
+  bad "a generated block is stale; run pnpm blocks:write"
+fi
+
 step "4. NEGATIVE CONTROL: the drift check must reject a corrupted corpus"
 target="corpus/canary/outbox.json"
 backup="$(mktemp)"

@@ -24,6 +24,7 @@ import type {
   RunRecord,
   RunSnapshot,
 } from "@model-regression-sentinel/run";
+import { corpusDigestOf } from "@model-regression-sentinel/run";
 import { type Rng, binomial } from "./rng.js";
 
 export interface SynthCase {
@@ -53,6 +54,15 @@ export interface SynthOptions {
    * perfectly still, which is the only way to test that the two are reported apart.
    */
   readonly metadata?: ProviderMetadata;
+  /**
+   * Fail this fraction of calls with the given error string. 1 fails every call.
+   *
+   * Added because there was no way to construct the degenerate arm at all, and that is why the
+   * degenerate arm went untested: an outage is the one condition a synthetic generator will never
+   * produce by accident. See scenario 13.
+   */
+  readonly errorRate?: number;
+  readonly errorText?: string;
 }
 
 const PASS = "PASS";
@@ -73,10 +83,14 @@ export function synthSnapshot(cases: readonly SynthCase[], options: SynthOptions
 
   for (const c of cases) {
     for (let r = 0; r < options.replicates; r += 1) {
+      const errored =
+        options.errorRate !== undefined && binomial(options.rng, 1, options.errorRate) === 1;
       const passed = binomial(options.rng, 1, c.passRate) === 1;
       const tail = c.latencyTail !== undefined && options.rng() < 0.125 ? c.latencyTail : 1;
       const response: ProviderResponse = {
-        text: passed ? PASS : FAIL,
+        // An errored call carries no text. `extractMetrics` drops it from every sample, which is
+        // the behaviour under test: dropped-and-counted, never scored as a failure.
+        text: errored ? "" : passed ? PASS : FAIL,
         inputTokens: 40,
         outputTokens: Math.round(logNormal(options.rng, c.medianOutputTokens * tokenScale, 0.18)),
         cacheReadTokens: 3301,
@@ -91,8 +105,8 @@ export function synthSnapshot(cases: readonly SynthCase[], options: SynthOptions
         maxOutputTokens: 64000,
         serviceTier: "standard",
         costBasis: "list",
-        stopReason: "end_turn",
-        error: "",
+        stopReason: errored ? "" : "end_turn",
+        error: errored ? (options.errorText ?? "ECONNREFUSED") : "",
       };
       records.push({
         caseId: c.caseId,
@@ -111,11 +125,20 @@ export function synthSnapshot(cases: readonly SynthCase[], options: SynthOptions
     capturedAt: options.capturedAt ?? "2026-08-26T00:00:00.000Z",
     provider: "synthetic",
     requestedModel: options.requestedModel ?? "synthetic-alias",
-    split: "canary",
+    splits: ["canary"],
     replicates: options.replicates,
     concurrency: 1,
     caseIds: cases.map((c) => c.caseId),
-    corpusDigest: options.corpusDigest ?? "synthetic-digest",
+    // COMPUTED FROM THE CASES, not a literal. It was `"synthetic-digest"` - a constant that matched
+    // nothing, including the cases the snapshot was built from. That was invisible while `compare`
+    // only checked the two snapshots against each other, and became a fifteen-test failure the
+    // moment it also checked them against the case list: every synthetic artifact in the suite was
+    // internally inconsistent, and the tests passed because nothing looked.
+    //
+    // A fixture that cannot survive the checks the real artifacts survive is a fixture that tests a
+    // weaker thing than it claims to. `corpusDigest` is still overridable, which is what scenario 08
+    // uses to build two genuinely different corpora.
+    corpusDigest: options.corpusDigest ?? corpusDigestOf(synthEvalCases(cases)),
     fingerprint: {
       requestedModel: options.requestedModel ?? "synthetic-alias",
       resolvedModel: options.resolvedModel ?? "synthetic-model-1",
@@ -129,7 +152,7 @@ export function synthSnapshot(cases: readonly SynthCase[], options: SynthOptions
     },
     ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
     records,
-    errorCount: 0,
+    errorCount: records.filter((r) => r.response.error !== "").length,
     cost: {
       model: "synthetic",
       n: records.length,

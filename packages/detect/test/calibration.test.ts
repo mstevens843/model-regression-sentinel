@@ -20,6 +20,8 @@ import {
   minimumDetectableRelativeEffect,
   mulberry32,
   ruleOfThree,
+  simulatePower,
+  smoothedRate,
   synthCases,
   synthEvalCases,
   synthSnapshot,
@@ -177,5 +179,50 @@ describe("the rule of three is reported and not implied", () => {
     // rendering of a sample that establishes nothing.
     expect(ruleOfThree(2)).toBe(1);
     expect(ruleOfThree(0)).toBe(1);
+  });
+});
+
+// THE SECOND THING BLOCKING NO_DRIFT, which the documentation did not know about.
+//
+// Every doc in this repository blamed `schemaValid` for `NO_DRIFT` being unreachable: it sits on
+// two cases, the sign-flip floor at k=2 is 0.5, and no effect can resolve. That was true and it was
+// half the reason. `refusal` blocked it too, on EVERY corpus, for a reason a larger corpus would
+// never have fixed.
+describe("a metric's minimum detectable effect is searched in the direction that means drift", () => {
+  const healthy = Array(12).fill(0); // nobody refuses, which is what a healthy corpus looks like
+  const rates = healthy.map((s) => smoothedRate(s, 10));
+
+  it("searching a DROP in refusal never resolves, at any effect size", () => {
+    // Not a sensitivity problem: the rate is already 0, so there is nothing to subtract. The
+    // simulated power comes back flat and never reaches the target, so the MDE is null at every
+    // size on the grid - and a gating metric with no resolvable MDE makes NO_DRIFT unreachable.
+    const powers = [0.05, 0.2, 0.6].map((e) =>
+      simulatePower(rates, 10, e, { simulations: 120, direction: "drop" }),
+    );
+    expect(Math.max(...powers), `flat at ${powers.join(", ")}`).toBeLessThan(0.8);
+    // Flat, not merely low: more effect buys nothing at all.
+    expect(Math.abs((powers[2] as number) - (powers[0] as number))).toBeLessThan(0.05);
+  });
+
+  it("searching a RISE resolves, because that is the direction a refusal metric degrades in", () => {
+    const small = simulatePower(rates, 10, 0.05, { simulations: 120, direction: "rise" });
+    const large = simulatePower(rates, 10, 0.4, { simulations: 120, direction: "rise" });
+    expect(large).toBeGreaterThan(0.9);
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it("and NO_DRIFT is reachable once the direction is right", () => {
+    // The verdict this project describes as the one people most want to see, and which no test in
+    // the repository had ever produced.
+    const flat = synthCases(12, Array(12).fill(0.9));
+    const b = synthSnapshot(flat, { label: "baseline", replicates: 10, rng: mulberry32(5) });
+    const c = synthSnapshot(flat, { label: "candidate", replicates: 10, rng: mulberry32(6) });
+    const r = compare(synthEvalCases(flat), b, c, {});
+    expect(r.verdict).toBe("NO_DRIFT");
+    expect(exitCodeFor(r)).toBe(0);
+    // And it means what it says: every gating metric resolved an MDE.
+    for (const f of r.findings.filter((x) => x.gating)) {
+      expect(f.mde?.mde, `${f.metric} has no resolvable MDE`).not.toBeNull();
+    }
   });
 });

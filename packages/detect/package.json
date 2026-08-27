@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/detect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tell provider drift apart from sampling noise: paired permutation testing against an empirically calibrated null, FDR-controlled per-case screening, and a computed minimum detectable effect.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -34,7 +34,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

@@ -27,7 +27,6 @@
 import type { CompareResult, MetricFinding } from "@model-regression-sentinel/detect";
 import { exitCodeFor, ruleOfThree } from "@model-regression-sentinel/detect";
 import {
-  CONSEQUENCE,
   DEFAULT_CONFIRM_COMMAND,
   HEAVY_RULE,
   RULE,
@@ -37,12 +36,14 @@ import {
   asPoints,
   asPointsMagnitude,
   asRelative,
+  consequenceOf,
   describeTest,
   effectOf,
   findingVerdict,
   gatingLabel,
   intervalOf,
   levelOf,
+  mdeMagnitudeOf,
   noiseFloorOf,
   pad,
   renderTable,
@@ -62,7 +63,7 @@ export function renderText(result: CompareResult): string {
   lines.push(
     `  ${pad("EXIT", 10)}${exitCodeFor(result, "confirmed")} (default gate)   ${exitCodeFor(result, "suspected")} (gate=suspected)`,
   );
-  lines.push(...wrap(CONSEQUENCE[result.verdict], RULE_WIDTH, "  "));
+  lines.push(...wrap(consequenceOf(result), RULE_WIDTH, "  "));
   lines.push("");
   lines.push(...wrap(result.reason, RULE_WIDTH, "  "));
   lines.push("");
@@ -119,7 +120,7 @@ function meaningLines(result: CompareResult): readonly string[] {
   if (result.verdict === "NO_DRIFT") {
     const resolvable = result.findings
       .filter((f) => f.gating && f.mde !== null && f.mde.mde !== null)
-      .map((f) => `${f.metric} at ${asPointsMagnitude(f.mde?.mde ?? Number.NaN)}`)
+      .map((f) => `${f.metric} at ${mdeMagnitudeOf(f)}`)
       .join(", ");
     return [
       `MEANS: nothing moved AND the suite could have seen it move. Smallest uniform drop resolvable: ${resolvable === "" ? "not computed on this run" : resolvable}.`,
@@ -195,6 +196,13 @@ function ceilingOf(result: CompareResult): Ceiling {
 // ---- sections ----------------------------------------------------------------------------------------
 
 function identityLines(result: CompareResult): readonly string[] {
+  if (!result.identityComparable) {
+    return wrap(
+      "NOT COMPARABLE: at least one arm never observed a provider identity, because no call in it succeeded. No fingerprint field could be compared, and this is not evidence that the identity held.",
+      RULE_WIDTH,
+      "  ",
+    );
+  }
   if (result.identityChanges.length === 0) {
     return wrap(
       "The provider fingerprint was unchanged: no recorded identity field moved. A useful fact and a weak one, since a vendor can serve different weights under an unchanged identity.",
@@ -285,6 +293,18 @@ function metricLines(result: CompareResult): readonly string[] {
 }
 
 function powerLines(result: CompareResult): readonly string[] {
+  // A RUN THAT MEASURED NOTHING HAS NO POWER TO REPORT. On an arm where every call failed this
+  // printed "replicates: 10 baseline, 10 candidate" and a rule-of-three ceiling computed from them
+  // - both true of the collection that was ATTEMPTED and neither true of any observation, since
+  // there were none. The rule of three bounds a failure rate given n trials that produced a result;
+  // quoting it over n trials that produced nothing is the same overclaim one section up.
+  if (result.couldNotLook !== null) {
+    return wrap(
+      `No power can be reported: ${result.couldNotLook} The replicate counts describe a collection that was attempted, not observations that were made, and the rule of three bounds a failure rate over trials that returned a result.`,
+      RULE_WIDTH,
+      "  ",
+    );
+  }
   const ceiling = ceilingOf(result);
   const withMde = result.findings.filter((f) => f.mde !== null);
   const out: string[] = [
@@ -318,7 +338,7 @@ function powerLines(result: CompareResult): readonly string[] {
             f.metric,
             String(mde.cases),
             String(mde.replicates),
-            mde.mde === null ? "none on the grid" : asPointsMagnitude(mde.mde),
+            mde.mde === null ? "none on the grid" : mdeMagnitudeOf(f),
             asPercent(mde.power),
             asPercent(mde.targetPower),
             String(mde.simulations),

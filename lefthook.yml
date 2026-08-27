@@ -1,8 +1,11 @@
-# Pre-commit hooks for model-regression-sentinel. lefthook is not yet a devDependency here; install
-# it once, then install the hooks:
+# Pre-commit hooks for model-regression-sentinel. lefthook IS a devDependency; install the hooks
+# once per clone:
 #
-#   pnpm add -D -w lefthook
-#   pnpm exec lefthook install
+#   pnpm hooks:install
+#
+# They are not installed automatically: `.npmrc` sets `ignore-scripts=true`, deliberately, so nothing
+# in this repository runs code at install time. Installing a git hook is a decision with a name on
+# it, the same way regenerating a manifest is.
 #
 # WHAT THIS IS. Three gates that read the staged file list and refuse the commit if it carries
 # something that cannot be taken back. Ported from durable-agent-outbox, which carries the first

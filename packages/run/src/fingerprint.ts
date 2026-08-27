@@ -113,5 +113,10 @@ export const undisclosedFields = (f: ProviderFingerprint): readonly string[] => 
   if (f.maxOutputTokens === null) out.push("maxOutputTokens");
   if (f.canonicalModel === "") out.push("canonicalModel");
   if (f.serviceTier === "") out.push("serviceTier");
+  // costBasis WAS MISSING, and it is in the hashed body four lines up. So for both BYOK adapters it
+  // is "" forever, compares equal to the next "" forever, and was never listed as undisclosed -
+  // which is precisely the bug this function's own docstring exists to prevent. A test asserted the
+  // four-element list, so the omission was pinned rather than merely present.
+  if (f.costBasis === "") out.push("costBasis");
   return out;
 };

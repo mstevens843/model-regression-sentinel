@@ -22,12 +22,13 @@ false positive.**
 
 Verdict breakdown: `INCONCLUSIVE` 200.
 
-**Not one split returned NO_DRIFT, and that is a finding about this corpus rather than about
-the provider.** A NO_DRIFT verdict requires every gating metric to have been genuinely checked, and
-`schemaValid` exists on only two cases here. Two cases give the sign-flip test four possible sign
-assignments and a smallest attainable p of 0.25, so no effect of any size can reach significance on
-it. The suite therefore cannot reach NO_DRIFT at all until more schema cases exist, and it answers
-INCONCLUSIVE instead. That is the honest answer and an inconvenient one.
+**Not one split returned NO_DRIFT, and that is a finding about this INSTRUMENT rather than
+about the provider.** A NO_DRIFT verdict requires every gating metric to have been genuinely
+checked, and
+`schemaValid` sits on 2 case(s) in the runs this study read. At k=2 the sign-flip
+test has 2^2 = 4 sign assignments, and it is TWO-SIDED - the observed assignment and its
+mirror are both always at least as extreme - so the smallest attainable p is 2/4 = 0.5000. That is ABOVE alpha, so no effect of any size can reach significance on it, and the suite
+cannot reach NO_DRIFT at all on this corpus. Honest, and inconvenient.
 
 The independently collected candidate arm is itself an A/A comparison, against the same alias in the
 same window. It came back **`INCONCLUSIVE`**.
@@ -68,14 +69,17 @@ If they disagreed, the MDE reporting would be wrong and this section would say s
 | rule of three at n=10 | an all-passing case still permits a 30.0% failure rate |
 | replicates needed for a 5 point effect | 30 |
 
-The prediction is the more conservative of the two, which is the right direction for it to be wrong
-in: the tool tells a user it can see less than it turns out to be able to see.
+The prediction (10.0 points) is the more CONSERVATIVE of the two, which is the right
+direction for it to be wrong in: the tool tells a user it can see less than it turns out to be able
+to see.
 
 ## What this does NOT establish
 
 - **That the tool detects real provider drift.** No drift event has been observed. The power curve
-  is measured against an injected effect that moves the pass rate cleanly and moves nothing else,
-  which is the quantity the MDE predicts and is not what a real model update looks like.
+  is measured against an injected effect that moves the pass rate cleanly, which is the quantity the
+  MDE predicts and is not what a real model update looks like. "Moves nothing else" is not quite
+  true and the overstatement is worth naming: the injection replaces the recorded output text, so
+  `schemaValid` and `refusal` move with it. Only `outputTokens` is genuinely untouched.
 - **That the false positive rate holds over time.** Both A/A arms were collected minutes apart. A
   baseline compared against a candidate collected six weeks later meets a different network, a
   different load and possibly a different region, and none of that is in this measurement.

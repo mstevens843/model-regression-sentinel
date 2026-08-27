@@ -25,6 +25,7 @@
 // mixing a parallel run into a latency percentile is the most common way this kind of benchmark
 // gets faked. Latency here is therefore reported with its collection concurrency attached.
 
+import { readFileSync } from "node:fs";
 import {
   type EvalCase,
   type Split,
@@ -36,7 +37,7 @@ import { type CostBounds, summariseCost } from "./cost.js";
 import { type ProviderFingerprint, fingerprintOf } from "./fingerprint.js";
 import { type ProviderMetadata, type TokenSource, metadataOf } from "./metadata.js";
 import { requestKey } from "./providers/replay.js";
-import type { CompletionRequest, Provider, ProviderResponse } from "./types.js";
+import { type CompletionRequest, type Provider, type ProviderResponse, threw } from "./types.js";
 
 /**
  * The version of the adapters in THIS repository.
@@ -46,7 +47,25 @@ import type { CompletionRequest, Provider, ProviderResponse } from "./types.js";
  * a different place the token counts come from. A comparison that spans an adapter change is not
  * measuring only the provider, and this is what makes that visible.
  */
-export const ADAPTER_VERSION = "0.2.0";
+export // HAND-MAINTAINED AND ALREADY WRONG ONCE: this read "0.2.0" while packages/run/package.json read
+// "0.1.0". The field exists so a comparison can say "the adapter changed between these two arms",
+// and a constant that does not move when the adapter does means `diffMetadata` CERTIFIES stability
+// across the one change that moved the numbers. Read from the manifest so it cannot drift again.
+const ADAPTER_VERSION: string = (() => {
+  try {
+    return (
+      (
+        JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+          version?: string;
+        }
+      ).version ?? "unknown"
+    );
+  } catch {
+    // A bundled consumer may not ship package.json beside the entry point. "unknown" is the honest
+    // answer and, unlike a stale literal, it cannot be mistaken for a version that held still.
+    return "unknown";
+  }
+})();
 
 /** Turn a case plus its versioned prompt into the exact request that will be issued. */
 export function renderRequest(evalCase: EvalCase): CompletionRequest {
@@ -84,7 +103,21 @@ export interface RunSnapshot {
   readonly provider: string;
   /** What was ASKED for. An alias stays an alias. */
   readonly requestedModel: string;
-  readonly split: Split;
+  /**
+   * Which splits were collected. AUTHORITATIVE, and an array because a run over more than one split
+   * has no single honest answer.
+   *
+   * `run-study.mjs` used to stamp the literal string "extended" on any multi-split run, so a fresh
+   * 34-case baseline claimed on disk to be the 16-case extended split. Nothing computed from it -
+   * `caseIds` and `corpusDigest` carry the real provenance - which is exactly why it went unnoticed:
+   * a provenance field that no code reads is a field only a human is misled by.
+   */
+  readonly splits: readonly Split[];
+  /**
+   * OPTIONAL AND DEPRECATED. Present on runs collected before `splits` existed, including the four
+   * in `results/runs/`. `readSnapshot` normalises it into `splits`; nothing should read it directly.
+   */
+  readonly split?: Split;
   readonly replicates: number;
   readonly concurrency: number;
   readonly caseIds: readonly string[];
@@ -132,9 +165,10 @@ export function corpusDigestOf(cases: readonly EvalCase[]): string {
 export async function runCorpus(
   provider: Provider,
   cases: readonly EvalCase[],
-  split: Split,
+  splits: Split | readonly Split[],
   options: RunOptions,
 ): Promise<RunSnapshot> {
+  const splitList = typeof splits === "string" ? [splits] : [...splits];
   const replicates = Math.max(1, Math.floor(options.replicates));
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 4));
   const now = options.now ?? (() => new Date());
@@ -161,7 +195,25 @@ export async function runCorpus(
       const unit = units[index] as { evalCase: EvalCase; replicate: number };
       const prompt = getPrompt(unit.evalCase.promptId);
       const request = renderRequest(unit.evalCase);
-      const response = await provider.complete(request);
+      // A THROWN PROVIDER IS ONE FAILED CALL, NOT A LOST RUN.
+      //
+      // `Promise.all` over the workers means one rejection discards every record collected so far,
+      // including hundreds of successful calls already paid for. That is a catastrophic response to
+      // a condition every provider produces routinely - a socket reset, a DNS blip, a JSON body that
+      // did not parse - and `ReplayProvider` rejects deliberately, so the hazard was live in-repo.
+      //
+      // An error is already a first-class outcome here: `ProviderResponse.error` is how a failed
+      // call is recorded, `extractMetrics` drops those from every sample and counts them
+      // separately, and a round where ALL of them failed is caught by `observedNothing`. A throw is
+      // the same event arriving through a different door, so it is converted rather than propagated.
+      let response: ProviderResponse;
+      try {
+        response = await provider.complete(request);
+      } catch (cause) {
+        response = threw(
+          cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause),
+        );
+      }
       records[index] = {
         caseId: String(unit.evalCase.id),
         replicate: unit.replicate,
@@ -186,7 +238,7 @@ export async function runCorpus(
     capturedAt: now().toISOString(),
     provider: provider.name,
     requestedModel: provider.model,
-    split,
+    splits: splitList,
     replicates,
     concurrency,
     caseIds: ordered.map((c) => String(c.id)),

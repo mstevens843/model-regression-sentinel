@@ -138,7 +138,24 @@ function walk(
     if (typeof s.maxItems === "number" && value.length > s.maxItems) {
       errors.push({ path, message: `${value.length} items is above maxItems ${s.maxItems}` });
     }
-    if (s.items !== undefined) {
+    if (Array.isArray(s.items)) {
+      // TUPLE `items`, which used to validate NOTHING. The array was passed to `walk` as if it were
+      // a schema, and `walk` returns immediately on an array - so
+      // `{type:"array",items:[{type:"number"},{type:"number"}]}` accepted `["wrong","types"]` with
+      // `valid:true` and an EMPTY `unsupportedKeywords`. Silent, and silent in the channel built to
+      // make under-validation loud.
+      const tuple = s.items as readonly JsonValue[];
+      value.forEach((item, i) => {
+        const sub = tuple[i];
+        if (sub !== undefined) walk(item, sub, `${path}[${i}]`, errors, unsupported);
+      });
+      if (s.additionalItems === false && value.length > tuple.length) {
+        errors.push({
+          path,
+          message: `${value.length} items against a ${tuple.length}-item tuple, and additionalItems is false`,
+        });
+      }
+    } else if (s.items !== undefined) {
       value.forEach((item, i) =>
         walk(item, s.items as JsonValue, `${path}[${i}]`, errors, unsupported),
       );
@@ -162,11 +179,38 @@ function walk(
         if (key in obj) walk(obj[key] as JsonValue, sub, `${path}.${key}`, errors, unsupported);
       }
     }
-    if (s.additionalProperties === false && props !== null) {
-      for (const key of Object.keys(obj)) {
-        if (!(key in props)) {
-          errors.push({ path, message: `additional property "${key}" is not permitted` });
-        }
+    // THREE SILENT LOOSENINGS LIVED IN THIS BLOCK, all inside a keyword the module lists as
+    // SUPPORTED - so none of them was reported in `unsupportedKeywords` either. `schemaValid` is a
+    // GATING metric, so each one is a route to a false pass on a build gate.
+    //
+    //   1. `additionalProperties` as a SCHEMA OBJECT was ignored entirely: only `=== false` was
+    //      handled, so `{properties:{a:{type:"number"}},additionalProperties:{type:"number"}}`
+    //      accepted `{a:1, zzz:"anything"}`.
+    //   2. `additionalProperties:false` with NO `properties` was skipped by the `props !== null`
+    //      guard, so a schema that permits no properties at all accepted every object.
+    //
+    // Verified latent rather than live: all 12 schemas in the corpus today avoid these shapes.
+    const extras = (): readonly string[] =>
+      Object.keys(obj).filter((key) => props === null || !(key in props));
+
+    if (s.additionalProperties === false) {
+      for (const key of extras()) {
+        errors.push({ path, message: `additional property "${key}" is not permitted` });
+      }
+    } else if (
+      s.additionalProperties !== undefined &&
+      s.additionalProperties !== true &&
+      typeof s.additionalProperties === "object" &&
+      s.additionalProperties !== null
+    ) {
+      for (const key of extras()) {
+        walk(
+          obj[key] as JsonValue,
+          s.additionalProperties as JsonValue,
+          `${path}.${key}`,
+          errors,
+          unsupported,
+        );
       }
     }
   }

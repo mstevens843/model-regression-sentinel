@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/spec",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The frozen eval-case format: a content-hashed, versioned case schema plus the freeze discipline that makes a corpus an instrument rather than a suggestion. Zero dependencies.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -34,7 +34,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

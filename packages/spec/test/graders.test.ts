@@ -148,3 +148,55 @@ describe("the JSON Schema subset", () => {
     expect(r.errors[0]?.path).toBe(".a.b");
   });
 });
+
+// THE REFUSAL LEXICON'S TWO FAILURE DIRECTIONS, both of which move a GATING metric.
+//
+// `nonRefusal` is a grader on all 34 cases, so a mis-scored refusal moves `refusal` AND `quality`.
+// Neither of these fires on the recorded runs - across 930 graded records not one marker of any
+// kind fires and not one output contains U+2019 - so this pins latent behaviour rather than
+// correcting a published number. That is worth saying plainly: the `refusal` metric has never
+// observed a positive on real data, and its power figures rest on an all-zero baseline.
+describe("the refusal lexicon, in both directions", () => {
+  const refused = (text: string): boolean => detectRefusal(text).refused;
+
+  it("is not fooled by a typographic apostrophe", () => {
+    // Six of the fourteen markers contain an apostrophe and models emit U+2019 routinely. Without
+    // the fold, a provider that changed nothing but its typography would move the refusal rate,
+    // and this project would report a font decision as drift.
+    expect(refused("I can't help with that.")).toBe(true);
+    expect(refused("I can’t help with that.")).toBe(true);
+    expect(refused("I won’t do that.")).toBe(true);
+    expect(refused("I’m sorry, I cannot do that.")).toBe(true);
+  });
+
+  it("does not score an answer as a refusal because of an AI preamble", () => {
+    // Defect #1 recurring with a different marker. The sentence-boundary rule cannot help: this
+    // marker genuinely opens the sentence, and the sentence then answers the question.
+    expect(refused("As an AI, the answer is HOLD.")).toBe(false);
+    expect(refused("As an AI language model, the answer is RETRY.")).toBe(false);
+  });
+
+  it("still catches a real refusal that arrives behind that preamble", () => {
+    // The reason `as an ai` is stripped rather than deleted. After the preamble the real marker
+    // follows a comma, which the sentence-boundary rule rejects - so deleting the entry would have
+    // traded a false positive for a false negative on a more common phrasing.
+    expect(refused("As an AI, I can't help with that.")).toBe(true);
+    expect(refused("As an AI language model, I cannot assist.")).toBe(true);
+  });
+
+  it("keeps the property the sentence-boundary rule was added for", () => {
+    expect(
+      refused(
+        "The main risk is that retrying can double-charge the customer, and I cannot rule that out from the timeout alone.",
+      ),
+    ).toBe(false);
+    expect(refused("Let me check. I cannot answer that.")).toBe(true);
+  });
+
+  it("reports the marker index in the original text, not the stripped one", () => {
+    // A report that explains itself has to point at the right place.
+    const v = detectRefusal("As an AI, I cannot help.");
+    expect(v.refused).toBe(true);
+    expect("As an AI, I cannot help.".toLowerCase().slice(v.index)).toMatch(/^i cannot/);
+  });
+});

@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "01",
+      "title": "aaIsQuiet: two runs of the same provider in the same window are not a regression"
+    },
+    {
+      "id": "02",
+      "title": "largeDriftIsCaught: a 30 point drop in pass rate is reported, not shrugged off"
+    },
+    {
+      "id": "03",
+      "title": "tinyDriftIsNotOverclaimed: a 2 point drop at n=10 is not reported as a confirmed regression"
+    },
+    {
+      "id": "04",
+      "title": "latencyNeverGates: a doubled latency with unchanged quality does not fail a build"
+    },
+    {
+      "id": "05",
+      "title": "repeatedLooksDoNotManufactureAlarms: a watch of pure noise does not fire, however long it runs"
+    },
+    {
+      "id": "06",
+      "title": "theWatcherStillFires: a real sustained drop does alarm the watcher"
+    },
+    {
+      "id": "07",
+      "title": "oneReplicateIsInconclusive: a single draw per case cannot separate drift from noise"
+    },
+    {
+      "id": "08",
+      "title": "differentCorporaAreNotComparable: two runs of different corpora are refused, not diffed"
+    },
+    {
+      "id": "09",
+      "title": "confirmationIsRequired: one crossing is suspected, only a reproduction is confirmed"
+    },
+    {
+      "id": "10",
+      "title": "identityChangeIsReportedWithoutAPValue: a changed resolved model is a fact, not a statistic"
+    },
+    {
+      "id": "11",
+      "title": "spentSensitivityIsReported: a watch that has gone blind says so instead of staying quiet"
+    },
+    {
+      "id": "12",
+      "title": "metadataDriftIsNotQualityDrift: a changed endpoint is reported, and is not a regression"
+    },
+    {
+      "id": "13",
+      "title": "anOutageIsNotAQuietRun: an arm where every call failed is not a report that nothing moved"
+    }
+  ],
+  "reference": {
+    "passed": 13,
+    "total": 13,
+    "clean": true
+  },
+  "mutants": [
+    {
+      "id": "rawDiff",
+      "description": "compares point estimates with no null model: any non-zero difference is a regression",
+      "mustFail": [
+        "01",
+        "03",
+        "04"
+      ],
+      "actuallyFailed": [
+        "01",
+        "03",
+        "04",
+        "07",
+        "09",
+        "10",
+        "13"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "alwaysQuiet",
+      "description": "never reports drift: passes every honesty property vacuously and is useless",
+      "mustFail": [
+        "02",
+        "06",
+        "09"
+      ],
+      "actuallyFailed": [
+        "02",
+        "06",
+        "09"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "alwaysDrift",
+      "description": "reports drift on everything, which is the same as reporting nothing",
+      "mustFail": [
+        "01",
+        "03",
+        "04",
+        "07",
+        "08"
+      ],
+      "actuallyFailed": [
+        "01",
+        "03",
+        "04",
+        "05",
+        "07",
+        "08",
+        "09",
+        "10",
+        "12"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "meanLatencyGate",
+      "description": "gates CI on a difference of mean latency, over a distribution with a fat tail",
+      "mustFail": [
+        "04"
+      ],
+      "actuallyFailed": [
+        "01",
+        "04"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "peeks",
+      "description": "runs a fixed-alpha test on every watch round, so repeated looks manufacture alarms",
+      "mustFail": [
+        "05"
+      ],
+      "actuallyFailed": [
+        "05"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "noConfirmation",
+      "description": "treats a single threshold crossing as a confirmed regression and fails the build",
+      "mustFail": [
+        "09"
+      ],
+      "actuallyFailed": [
+        "09"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "anyCorpus",
+      "description": "compares any two runs, including runs of different corpora",
+      "mustFail": [
+        "08"
+      ],
+      "actuallyFailed": [
+        "08"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "singleReplicateOk",
+      "description": "returns a confident verdict from one draw per case, where no noise estimate exists",
+      "mustFail": [
+        "07",
+        "13"
+      ],
+      "actuallyFailed": [
+        "07",
+        "13"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "hidesDebt",
+      "description": "reports a healthy wealth while it has quietly gone blind, so nobody re-baselines",
+      "mustFail": [
+        "11"
+      ],
+      "actuallyFailed": [
+        "05",
+        "11"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "outageIsQuiet",
+      "description": "reports a collection that failed as a collection that found nothing, at exit 0, forever",
+      "mustFail": [
+        "13"
+      ],
+      "actuallyFailed": [
+        "13"
+      ],
+      "escapes": []
+    },
+    {
+      "id": "metadataIsRegression",
+      "description": "fails a build on a metadata change, which carries no p-value and is not behaviour",
+      "mustFail": [
+        "12"
+      ],
+      "actuallyFailed": [
+        "12"
+      ],
+      "escapes": []
+    }
+  ],
+  "totalEscapes": 0
+}

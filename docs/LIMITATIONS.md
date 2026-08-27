@@ -30,12 +30,43 @@ that the noise floors, the error rates or the alias-resolution behaviour resembl
 provider's. The two BYOK HTTP adapters exist so that someone with a key can find out; they have never
 been run.
 
-## 4. `NO_DRIFT` is unreachable on the shipped corpus
+## 4. `NO_DRIFT` is unreachable on the v0.1 corpus, and was observed on the v0.2 one
 
-Not one of 200 A/A splits returned it. A `NO_DRIFT` verdict requires every gating metric to have been
-genuinely checked, and `schemaValid` exists on only two cases, which gives the sign-flip test four
-possible assignments and a smallest attainable p of 0.25. No effect of any size can reach significance
-on it, so the suite answers `INCONCLUSIVE`. Honest, and inconvenient. More schema cases would fix it.
+**Read the version numbers in this one carefully, because they are the whole content.**
+
+Not one of 200 A/A splits returned `NO_DRIFT`. A `NO_DRIFT` verdict requires every gating metric to
+have been genuinely checked, and in **the v0.1 corpus the four recorded runs were collected
+against** `schemaValid` exists on only two cases. Two cases give the sign-flip test four sign
+assignments, and because the test is two-sided the observed assignment and its mirror are both
+always at least as extreme - so the smallest attainable p is 2/2^2 = 0.5. No effect of any size can
+reach significance on it, and the suite answers `INCONCLUSIVE` instead.
+
+**A second blocker was a defect, and it is fixed.** `refusal` is also gating, and the power
+simulator searched a *drop* in it. On any healthy corpus the refusal rate is 0, so there is nothing
+to drop: the simulated power came back flat at about 33 percent for every effect size on the grid
+and the MDE resolved to `null` at every size. That blocked `NO_DRIFT` on **every** corpus, not only
+on one short of schema cases, and no amount of collecting would have fixed it. The simulator now
+searches the direction each metric actually degrades in - a rise, for a refusal rate - and `refusal`
+resolves an MDE of about 8 points on the recorded runs.
+
+**AND THEN IT WAS OBSERVED.** With both fixed, the 34-case v0.2 collection returned `NO_DRIFT` on
+two independently collected arms against one pinned alias, with every gating metric resolving a
+minimum detectable effect: `quality` 10.0 pp, `schemaValid` 25.0 pp, `refusal` 8.0 pp,
+`outputTokens` 15.0%. That is the first `NO_DRIFT` verdict this project has produced on real
+provider outputs. It is recorded in [RESULTS.md](../RESULTS.md) and
+[results/CALIBRATION-V2.md](../results/CALIBRATION-V2.md).
+
+**THIS SECTION IS NOW A LIMITATION OF ONE CORPUS, NOT OF THE TOOL**, and it is kept because the
+v0.1 recorded runs are still the evidence behind `results/CALIBRATION.md`, and on those 24 cases
+`NO_DRIFT` remains unreachable for the reason above. Do not read this section as a live constraint
+on what the detector can do.
+
+**v0.2 made it structurally reachable and did not make it observed.** The `schema` split takes
+`schemaValid` from 2 cases to 12, where the floor is 2/4096 rather than 2/4. That is a fact about
+the corpus. Whether `NO_DRIFT` is reachable against a real provider is a fact about data, and the
+only evidence this repository has was collected against the 24-case corpus, so **nothing here has
+yet observed a `NO_DRIFT` verdict on real outputs.** A fresh collection over all 34 cases is the
+experiment that would answer it, and it has not been run.
 
 ## 5. The watcher goes progressively blind, and the fix is operational
 
@@ -79,5 +110,5 @@ likely misreading of a confirmed finding is that it names a cause.
 - **Synthetic calibration draws from parametric families.** Real provider nondeterminism has
   structure no family captures, so a false-positive rate measured against synthetic data is a lower
   bound. The A/A study on recorded outputs is the stronger evidence and is the one quoted.
-- **The corpus is 24 cases chosen by the same person who wrote the detector.** A case can fail to
+- **The corpus is 34 cases chosen by the same person who wrote the detector.** A case can fail to
   discriminate simply because nothing here is hard enough.

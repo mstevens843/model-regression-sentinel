@@ -333,11 +333,16 @@ describe("the provider identity fingerprint", () => {
       modelServed: "x",
       error: "",
     });
+    // `costBasis` belongs here and was absent: it sits in the hashed fingerprint body, so leaving
+    // it out meant a field that is "" forever, and compares equal forever, was never reported as
+    // undisclosed. This assertion PINNED the omission - an exact-list expectation turns a missing
+    // entry into the thing the test defends.
     expect(undisclosedFields(partial)).toEqual([
       "contextWindow",
       "maxOutputTokens",
       "canonicalModel",
       "serviceTier",
+      "costBasis",
     ]);
     expect(undisclosedFields(sonnet)).toEqual([]);
   });

@@ -40,7 +40,6 @@ import {
 } from "@model-regression-sentinel/detect";
 import { undisclosedFields } from "@model-regression-sentinel/run";
 import {
-  CONSEQUENCE,
   DEFAULT_CONFIRM_COMMAND,
   type ReportContext,
   asP,
@@ -49,6 +48,7 @@ import {
   asPointsMagnitude,
   asRelative,
   belowRateFloor,
+  consequenceOf,
   describeTest,
   drawsBehind,
   effectOf,
@@ -57,6 +57,7 @@ import {
   intervalOf,
   levelOf,
   markdownTable,
+  mdeMagnitudeOf,
   metricLabel,
   noiseFloorOf,
   wrap,
@@ -101,7 +102,7 @@ export function renderMarkdown(result: CompareResult, options: MarkdownOptions =
 
   // 1. the verdict and its consequence, then the detector's own sentence, unedited.
   push("## Verdict", "");
-  push(...para(`**${result.verdict}** - ${CONSEQUENCE[result.verdict]}`));
+  push(...para(`**${result.verdict}** - ${consequenceOf(result)}`));
   push(
     ...para(
       `Exit code **${exitCodeFor(result, "confirmed")}** under the default \`confirmed\` gate, and **${exitCodeFor(result, "suspected")}** under the opt-in \`suspected\` gate.`,
@@ -115,6 +116,9 @@ export function renderMarkdown(result: CompareResult, options: MarkdownOptions =
 
   push("## Provider identity", "");
   push(...identitySection(result, options));
+
+  push("## Provider metadata", "");
+  push(...metadataSection(result));
 
   push("## Metrics", "");
   push(...metricsSection(result));
@@ -204,9 +208,7 @@ function meaningBlock(result: CompareResult, options: ReportContext): readonly s
         if (mde === null) return [f.metric];
         return [
           f.metric,
-          mde.mde === null
-            ? "no drop on the grid reached the target power"
-            : asPointsMagnitude(mde.mde),
+          mde.mde === null ? "no drop on the grid reached the target power" : mdeMagnitudeOf(f),
           asPercent(mde.power),
           asPercent(mde.targetPower),
         ];
@@ -357,12 +359,64 @@ function meaningBlock(result: CompareResult, options: ReportContext): readonly s
 
 // ---- 3. provider identity ---------------------------------------------------------------------------
 
+/**
+ * Provider metadata drift, in the two outputs that leave the terminal.
+ *
+ * THIS SECTION EXISTED ONLY IN THE TEXT RENDERER. `metadataChanges` was rendered by `renderText`
+ * and by nothing else, so `--format md` and `--format json` - the report pasted into a pull request
+ * and the one a pipeline parses - silently dropped an entire category of "we could not compare
+ * this". The four recorded runs predate provider metadata entirely, so on every real comparison the
+ * terminal said "NOT COMPARABLE, and therefore not evidence of anything" while the markdown said
+ * nothing at all.
+ *
+ * The rows that look like nothing are the reason the section exists: two absences are two absences,
+ * and filtering them turns "nobody could compare this" into "this agreed" on the way to the page.
+ */
+function metadataSection(result: CompareResult): readonly string[] {
+  const changes = result.metadataChanges;
+  if (changes.length === 0) {
+    return para(
+      "Every recorded metadata field matched: same resolved model, same capability facts, same endpoint, same adapter and the same token source. The comparison is of like with like.",
+    );
+  }
+  const real = changes.filter(
+    (c) => c.kind === "changed" || c.kind === "appeared" || c.kind === "disappeared",
+  );
+  const absent = changes.filter((c) => c.kind === "indeterminate" || c.kind === "both_absent");
+  const out: string[] = [];
+  if (real.length > 0) {
+    out.push(
+      ...para(
+        `**${real.length} metadata field(s) moved.** Metadata carries no p-value: a field either moved or it did not, and no sampling is involved. A changed endpoint or token source alters what the numbers MEAN without being a behaviour change.`,
+      ),
+      ...markdownTable(
+        ["field", "kind", "before", "after"],
+        real.map((c) => [`\`${c.field}\``, c.kind, c.before, c.after]),
+      ),
+    );
+  }
+  if (absent.length > 0) {
+    out.push(
+      ...para(
+        `**${absent.length} field(s) could not be compared**, and that is reported rather than filtered. An absence on one side and an absence on the other are two absences, not an agreement.`,
+      ),
+      ...markdownTable(
+        ["field", "kind", "note"],
+        absent.map((c) => [`\`${c.field}\``, c.kind, c.note ?? ""]),
+      ),
+    );
+  }
+  return out;
+}
+
 function identitySection(result: CompareResult, options: ReportContext): readonly string[] {
   const out: string[] = [];
   if (result.identityChanges.length === 0) {
     out.push(
       ...para(
-        "The provider fingerprint was **unchanged** between the two arms: every recorded identity field held the same value. That is a useful fact and a weak one. A vendor can serve different weights under an unchanged identity just as easily as it can re-tag identical weights under a new one.",
+        result.identityComparable
+          ? "The provider fingerprint was **unchanged** between the two arms: every recorded identity field held the same value. That is a useful fact and a weak one. A vendor can serve different weights under an unchanged identity just as easily as it can re-tag identical weights under a new one."
+          : "**Not comparable.** At least one arm never observed a provider identity, because no call in it succeeded, so no fingerprint field could be compared. This is not evidence that the identity held.",
       ),
     );
   } else {
@@ -565,7 +619,7 @@ function powerSection(result: CompareResult): readonly string[] {
             metricLabel(f),
             String(mde.cases),
             String(mde.replicates),
-            mde.mde === null ? "**none on the grid**" : asPointsMagnitude(mde.mde),
+            mde.mde === null ? "**none on the grid**" : mdeMagnitudeOf(f),
             asPercent(mde.power),
             asPercent(mde.targetPower),
             mde.alpha.toFixed(3),

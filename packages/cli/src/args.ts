@@ -61,6 +61,57 @@ export const required = (args: Args, name: string): string => {
 export const bool = (args: Args, name: string): boolean =>
   args.booleans.has(name) || args.flags.get(name) === "true";
 
+/**
+ * A flag that must be a number, validated rather than coerced.
+ *
+ * WHY THIS EXISTS AND WHAT IT COST TO NOT HAVE IT. Every numeric flag was read as
+ * `Number(flag(args, name, default))`, and `Number("bogus")` is NaN. Downstream, `options.alpha ??
+ * 0.05` cannot catch that, because NaN is not nullish - so a mistyped threshold reached the
+ * detector intact and every significance test became `p <= NaN`, which is false for every p. The
+ * measured consequence:
+ *
+ *     compare --baseline b.json --candidate positive-control.json --confirm positive-control.json
+ *       -> exit 1, CONFIRMED_DRIFT
+ *     ... the same command with --alpha bogus
+ *       -> exit 0, INCONCLUSIVE
+ *
+ * A real, reproduced, cross-model regression silently downgraded to a passing build by a typo,
+ * with the string "NaN" a hundred lines below the verdict as the only trace. `--alpha 1e999` is the
+ * mirror image: Infinity makes everything significant.
+ *
+ * The same hole ran through `--replicates`, `--concurrency`, `--target-effect` and `--every`.
+ * `--replicates bogus` printed "would collect 34 cases x NaN replicates = NaN calls" and exited 0;
+ * with `--yes` it reached `Math.max(1, Math.floor(NaN))`, which is NaN, produced a sparse record
+ * array, and wrote syntactically invalid JSON into the baseline directory.
+ *
+ * A REFUSAL IS THE ONLY SAFE ANSWER. Falling back to the default would be worse than the bug: the
+ * user would get a run that silently ignored what they asked for, which is the same class of lie
+ * this whole project is about. Misuse is exit 2.
+ */
+export function numberFlag(
+  args: Args,
+  name: string,
+  fallback: number,
+  bounds: { readonly min?: number; readonly max?: number; readonly integer?: boolean } = {},
+): number {
+  const raw = args.flags.get(name);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(value)) {
+    throw new UsageError(`--${name} must be a number, not "${raw}"`);
+  }
+  if (bounds.integer === true && !Number.isInteger(value)) {
+    throw new UsageError(`--${name} must be a whole number, not "${raw}"`);
+  }
+  if (bounds.min !== undefined && value < bounds.min) {
+    throw new UsageError(`--${name} must be at least ${bounds.min}, not "${raw}"`);
+  }
+  if (bounds.max !== undefined && value > bounds.max) {
+    throw new UsageError(`--${name} must be at most ${bounds.max}, not "${raw}"`);
+  }
+  return value;
+}
+
 /** A usage problem, which exits 2 rather than 1: misuse is not a regression. */
 export class UsageError extends Error {
   constructor(message: string) {

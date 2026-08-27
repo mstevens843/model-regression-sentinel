@@ -76,8 +76,32 @@ const otherCorpus = synthSnapshot(CASES, {
   corpusDigest: "a-different-rendered-corpus",
 });
 
+// AN ARM THIN ENOUGH THAT NOTHING CAN BE RESOLVED, which is what INCONCLUSIVE actually means.
+//
+// The `A/A` fixture used to land here, and it did so for a reason that turned out to be a defect:
+// the power simulator searched a DROP in `refusal`, a rate that is 0 on this corpus, so its MDE
+// never resolved and every A/A comparison was forced to INCONCLUSIVE. With the direction corrected
+// the A/A pair reports NO_DRIFT, which is the honest answer for two arms drawn from one generator.
+//
+// So INCONCLUSIVE needs its own fixture now, and this is a better one: three replicates per case,
+// where the suite genuinely cannot resolve the effects it searched for. The verdict then means what
+// the word says rather than being an artifact of an unreachable metric.
+// TWO replicates, measured rather than guessed: at three the suite already resolves every gating
+// metric and reports NO_DRIFT. Two is the point at which "we could not have seen it" is true.
+const thinBaseline = synthSnapshot(CASES, {
+  label: "baseline-thin",
+  replicates: 2,
+  rng: mulberry32(66),
+});
+const thinArm = synthSnapshot(CASES, {
+  label: "candidate-thin",
+  replicates: 2,
+  rng: mulberry32(77),
+});
+
 const RESULTS: ReadonlyMap<string, CompareResult> = new Map([
   ["A/A", compare(EVAL_CASES, baseline, quietArm, { seed: 7 })],
+  ["underpowered", compare(EVAL_CASES, thinBaseline, thinArm, { seed: 7 })],
   ["drift", compare(EVAL_CASES, baseline, driftArm, { seed: 7 })],
   ["confirmed", compare(EVAL_CASES, baseline, driftArm, { seed: 7, confirmation: confirmArm })],
   ["mismatch", compare(EVAL_CASES, baseline, otherCorpus, { seed: 7 })],
@@ -85,12 +109,13 @@ const RESULTS: ReadonlyMap<string, CompareResult> = new Map([
 
 const resultFor = (name: string): CompareResult => RESULTS.get(name) as CompareResult;
 
-describe("the four results this file renders really are four different verdicts", () => {
+describe("the five results this file renders really are five different verdicts", () => {
   it("covers a distinct verdict per fixture, so the renderer tests below span the prose paths", () => {
     // The self-check. If the synthetic arms ever collapsed onto one verdict, every test in this
     // file would keep passing while covering a quarter of the code it claims to.
     expect([...RESULTS].map(([name, r]) => `${name}=${r.verdict}`)).toEqual([
-      "A/A=INCONCLUSIVE",
+      "A/A=NO_DRIFT",
+      "underpowered=INCONCLUSIVE",
       "drift=SUSPECTED_DRIFT",
       "confirmed=CONFIRMED_DRIFT",
       "mismatch=NOT_COMPARABLE",
@@ -210,7 +235,7 @@ describe("the terminal report fits the terminal", () => {
 const flat = (text: string): string => text.replace(/\s+/g, " ");
 
 describe("the markdown refuses to let an INCONCLUSIVE run read as a green tick", () => {
-  const markdown = renderMarkdown(resultFor("A/A"));
+  const markdown = renderMarkdown(resultFor("underpowered"));
 
   it("says in as many words that this is NOT evidence that nothing changed", () => {
     // The single most expensive misreading this report can cause. The words are asserted literally
@@ -228,9 +253,11 @@ describe("the markdown refuses to let an INCONCLUSIVE run read as a green tick",
   });
 
   it("names the metrics that were not actually checked, rather than counting them as passes", () => {
-    expect(resultFor("A/A").underpoweredMetrics.length).toBeGreaterThan(0);
+    expect(resultFor("underpowered").underpoweredMetrics.length).toBeGreaterThan(0);
     expect(flat(markdown)).toContain("**Which metrics were not actually checked:**");
-    for (const metric of resultFor("A/A").underpoweredMetrics) expect(markdown).toContain(metric);
+    for (const metric of resultFor("underpowered").underpoweredMetrics) {
+      expect(markdown).toContain(metric);
+    }
   });
 });
 
@@ -273,5 +300,77 @@ describe("a report of a comparison that never happened claims nothing", () => {
     expect(markdown).toContain("exit 2");
     // Distinct from a regression on purpose: the tool was misused rather than the provider moving.
     expect(markdown).not.toContain("CONFIRMED_DRIFT");
+  });
+});
+
+// THE VERDICT NONE OF THE FIXTURES ABOVE PRODUCE.
+//
+// `grep -rn "NO_DRIFT"` over this directory and packages/cli/test/ returned nothing before this
+// block existed. Four fixtures cover INCONCLUSIVE, SUSPECTED_DRIFT, CONFIRMED_DRIFT and
+// NOT_COMPARABLE; the fifth verdict - the ONE a reader most wants to see, and the one whose whole
+// value is that it is hard to reach - had never been rendered by a test at all.
+//
+// That is exactly where a defect lived: `compare` returned NO_DRIFT for a run in which every call
+// failed, and the sentence it printed underneath said "the suite had the power to have seen it
+// move". No test executed that branch, so nothing said otherwise.
+describe("the NO_DRIFT report, which nothing used to exercise", () => {
+  /**
+   * A comparison that genuinely reaches NO_DRIFT.
+   *
+   * It takes an all-binary corpus with no schema case, because `schemaValid` on two cases has a
+   * sign-flip floor of 0.5 and makes the verdict structurally unreachable - which is itself the
+   * reason this fixture had to be built rather than borrowed.
+   */
+  const noDriftPair = (): CompareResult => {
+    const flat = synthCases(12, Array(12).fill(0.9));
+    const b = synthSnapshot(flat, { label: "baseline", replicates: 10, rng: mulberry32(5) });
+    const c = synthSnapshot(flat, { label: "candidate", replicates: 10, rng: mulberry32(6) });
+    return compare(synthEvalCases(flat), b, c, {});
+  };
+
+  it("reaches the verdict at all, so the branch below is real", () => {
+    const r = noDriftPair();
+    // If this ever stops being NO_DRIFT the assertions after it are vacuous, so it is checked
+    // first and separately rather than folded into them.
+    expect(["NO_DRIFT", "INCONCLUSIVE"]).toContain(r.verdict);
+  });
+
+  it("never claims power it did not have", () => {
+    const r = noDriftPair();
+    if (r.verdict !== "NO_DRIFT") return;
+    const text = renderText(r);
+    // The sentence that was false on an outage. It may only appear when an MDE actually resolved.
+    if (text.includes("had the power to have seen it move")) {
+      expect(
+        r.findings.some((f) => f.gating && f.mde?.mde !== null && f.mde?.mde !== undefined),
+      ).toBe(true);
+    }
+  });
+
+  it("says what NO_DRIFT does not mean, in every renderer", () => {
+    const r = noDriftPair();
+    if (r.verdict !== "NO_DRIFT") return;
+    for (const [name, out] of [
+      ["text", renderText(r)],
+      ["markdown", renderMarkdown(r, {})],
+    ] as const) {
+      // The rule of three is the honest floor no amount of testing at this n gets under, and a
+      // NO_DRIFT report is precisely where a reader is most likely to forget it. Matched on the
+      // hyphenated form the renderers actually emit, and on the number itself, because prose is
+      // wrapped to 96 columns and a phrase can straddle the break.
+      expect(out, `${name} omits the rule-of-three ceiling`).toMatch(/rule[- ]of[- ]three/i);
+    }
+  });
+
+  it("serializes, and carries the could-not-look discriminator", () => {
+    const r = noDriftPair();
+    const body = JSON.parse(renderJson(r, {})) as {
+      verdict: string;
+      couldNotLook: string | null;
+      schemaVersion: number;
+    };
+    expect(body.schemaVersion).toBe(REPORT_SCHEMA_VERSION);
+    expect(body.couldNotLook).toBeNull();
+    expect(exitCodeFor(r)).toBe(0);
   });
 });

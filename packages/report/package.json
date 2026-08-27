@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/report",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Markdown and JSON drift reports with an exit-code ledger, where a non-zero exit requires a CONFIRMED regression rather than a raw diff.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -34,7 +34,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

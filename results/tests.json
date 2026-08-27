@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "package": "cli",
+      "files": 40,
+      "tests": 163,
+      "passed": 163
+    },
+    {
+      "package": "spec",
+      "files": 28,
+      "tests": 115,
+      "passed": 115
+    },
+    {
+      "package": "detect",
+      "files": 15,
+      "tests": 77,
+      "passed": 77
+    },
+    {
+      "package": "run",
+      "files": 23,
+      "tests": 75,
+      "passed": 75
+    },
+    {
+      "package": "report",
+      "files": 15,
+      "tests": 57,
+      "passed": 57
+    },
+    {
+      "package": "watch",
+      "files": 19,
+      "tests": 56,
+      "passed": 56
+    },
+    {
+      "package": "baseline",
+      "files": 12,
+      "tests": 36,
+      "passed": 36
+    }
+  ],
+  "totalTests": 579,
+  "totalFiles": 152
+}

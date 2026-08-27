@@ -43,7 +43,7 @@ function snapshot(label: string, capturedAt: string): RunSnapshot {
     capturedAt,
     provider: "fixture",
     requestedModel: "fixture-alias",
-    split: "canary",
+    splits: ["canary"],
     replicates: 2,
     concurrency: 1,
     caseIds: ["cse-c-001"],

@@ -78,15 +78,18 @@ runs in `pnpm test` and never touches the network.
 
 ## Blockers, measured and not assumed
 
-**1. Not one package has a README.** `files` is `["dist", "LICENSE"]` in all seven manifests and
-there is no `packages/*/README.md` in the repository. npmjs.com renders a package's README as its
-entire page, so all seven would publish as blank pages, and the root `README.md` is not shipped in
-any tarball. This is the largest blocker and it is prose work rather than tooling work.
+**1. ~~Not one package has a README.~~ CLOSED.** All seven now carry one and all seven list it in
+`files`, so it reaches the tarball. Verified rather than assumed:
 
 ```sh
-ls packages/*/README.md            # no matches
-npm pack --dry-run 2>&1 | grep -i readme    # in any package: nothing
+ls packages/*/README.md                     # seven matches
+grep -h '"files"' -A 3 packages/*/package.json | grep -c README.md   # 7
+cd packages/cli && npm pack --dry-run 2>&1 | grep README.md          # 3.2kB README.md
 ```
+
+Each opens with the same warning block - pre-1.0, nothing published, and the headline limitation
+that the tool has never observed a real provider drift event - because a package page is read
+entirely out of the context of this repository and a reader who lands on one has seen none of it.
 
 **2. `npm publish` would ship the `workspace:` protocol verbatim and break every install.** All six
 inter-package dependencies use `workspace:^`. `npm pack` copies that string into the tarball, and
@@ -148,10 +151,10 @@ In this order, in one sitting, on one clean checkout. "It passed yesterday" is n
    grep -h '"name"' packages/*/package.json
    ```
 
-2. [ ] **Write a README for every package** (blocker 1) and add it to `files`. Each one is read out
-   of the context of this repository, so each needs its own opening paragraph, its own install
-   snippet, a link to `docs/LIMITATIONS.md` and `docs/FREEZE.md`, and a "nothing here is published
-   yet" note that becomes false the moment step 11 succeeds.
+2. [x] **Write a README for every package** (blocker 1) and add it to `files`. **Done.** Each one
+   opens out of the context of this repository, carries the headline limitation, and ends with a
+   table placing the package among the other six. The "nothing here is published yet" line in each
+   becomes false the moment step 11 succeeds and has to be removed in the same change.
 
 3. [ ] **Re-fetch every name, and confirm the account.** Availability measured on another day is not
    availability.

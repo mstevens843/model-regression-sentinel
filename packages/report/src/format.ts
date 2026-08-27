@@ -70,8 +70,16 @@ export interface ReportContext {
 }
 
 /** The default confirmation instruction, when the caller does not name its own command. */
-export const DEFAULT_CONFIRM_COMMAND =
-  "sentinel compare --baseline <baseline.json> --candidate <candidate.json> --confirmation <a second, independently collected candidate run>";
+//
+// THE FLAG NAME HERE IS PARSED, NOT DECORATIVE. This string is printed as the next action on every
+// SUSPECTED_DRIFT report, and it said `--confirmation` while the CLI has always parsed `--confirm`.
+// Unknown flags are accepted silently, so a person following the tool's own instruction got a
+// second SUSPECTED_DRIFT saying "No confirmation arm was supplied" and nothing explaining why -
+// which closes the promotion path from SUSPECTED to CONFIRMED, the one transition this project
+// exists to make possible. `packages/cli/test/contract.test.ts` now asserts the flag named here is
+// a flag the parser accepts.
+export const CONFIRM_FLAG = "--confirm";
+export const DEFAULT_CONFIRM_COMMAND = `sentinel compare --baseline <baseline.json> --candidate <candidate.json> ${CONFIRM_FLAG} <a second, independently collected candidate run>`;
 
 /** The consequence of each verdict, stated as the exit code plus the one sentence behind it. */
 export const CONSEQUENCE: Readonly<Record<Verdict, string>> = {
@@ -87,6 +95,24 @@ export const CONSEQUENCE: Readonly<Record<Verdict, string>> = {
 };
 
 // ---- text tables ---------------------------------------------------------------------------------
+
+/**
+ * The consequence of an actual result, which is not always a function of its verdict alone.
+ *
+ * INCONCLUSIVE has two causes with opposite remedies - too little power, or an arm that never
+ * reached the provider - and only the second exits 3. Reading `CONSEQUENCE[verdict]` printed
+ * "exit 0" underneath a header that already said "EXIT 3", so one report stated the exit code twice
+ * and disagreed with itself.
+ */
+export function consequenceOf(result: {
+  readonly verdict: Verdict;
+  readonly couldNotLook?: string | null;
+}): string {
+  if (result.couldNotLook !== undefined && result.couldNotLook !== null) {
+    return "exit 3. An arm never reached the provider, so nothing was measured. This is an outage, not a clean run, and it is deliberately not exit 0.";
+  }
+  return CONSEQUENCE[result.verdict];
+}
 
 export const pad = (value: string, width: number): string =>
   value.length >= width ? value : value + " ".repeat(width - value.length);
@@ -228,6 +254,27 @@ export const intervalOf = (finding: MetricFinding): string => {
  * relative calibration for continuous metrics, so a percentage is the correct rendering and the two
  * columns finally mean the same thing.
  */
+/**
+ * A minimum detectable effect, in the units the metric is actually measured in.
+ *
+ * THE SAME UNIT BUG AS `noiseFloorOf`, ONE COLUMN OVER, and it survived the fix to that one because
+ * the two were written in different places and nothing compared them. Every MDE render site called
+ * `asPointsMagnitude` unconditionally, which multiplies by 100 and appends "pp" - correct for a
+ * binary metric, where the MDE is a drop in a rate, and wrong for a continuous one, where it is a
+ * fraction of each case's own baseline. So a report printed
+ *
+ *     outputTokens  PASS  no move; a 8.0 pp drop would have been caught 83.0% of the time
+ *
+ * for a 8 percent relative shift, on the same run where the effect column for that metric read
+ * "+174.6%". Two numbers a reader is invited to compare, rendered in different conventions, in the
+ * same table.
+ */
+export const mdeMagnitudeOf = (finding: MetricFinding): string => {
+  const value = finding.mde?.mde ?? null;
+  if (value === null) return "not measured";
+  return finding.binary ? asPointsMagnitude(value) : asRelativeMagnitude(value);
+};
+
 export const noiseFloorOf = (finding: MetricFinding): string =>
   // Null means no calibration was possible, which is a different statement from a floor of zero and
   // must not render as one. A reader who sees "0.0 pp" concludes this provider is perfectly stable.

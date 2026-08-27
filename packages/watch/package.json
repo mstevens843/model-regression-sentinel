@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/watch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Continuous canary watching for a pinned model alias, using an always-valid e-process so repeated looks do not manufacture false alarms.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -34,7 +34,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

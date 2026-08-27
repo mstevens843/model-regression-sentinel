@@ -504,6 +504,96 @@ export const metadataDriftIsNotQualityDrift: CalibrationScenario = {
   },
 };
 
+/**
+ * THE SCENARIO THAT WAS MISSING, and the shape of its absence is worth recording.
+ *
+ * Every other honesty scenario here asks the detector not to overreact to something that DID
+ * happen. This one asks it not to report a result at all for something that never happened, and
+ * that distinction is the whole difference between "we looked and saw nothing" and "we never
+ * looked". The suite had eleven scenarios about the first and none about the second, so a detector
+ * that answered NO_DRIFT to a total collection failure passed the entire calibration suite.
+ *
+ * It was not a hypothetical. `compare` did exactly that: a candidate arm in which all 240 calls
+ * returned ECONNREFUSED reported NO_DRIFT at exit 0, with the sentence "the suite had the power to
+ * detect the effect sizes it searched for" attached to a run that measured nothing.
+ */
+export const anOutageIsNotAQuietRun: CalibrationScenario = {
+  id: "13",
+  title:
+    "anOutageIsNotAQuietRun: an arm where every call failed is not a report that nothing moved",
+  run(detector) {
+    const out: CheckResult[] = [];
+    const baseline = synthSnapshot(CASES, {
+      label: "baseline",
+      replicates: 10,
+      rng: mulberry32(97),
+    });
+    const dead = synthSnapshot(CASES, {
+      label: "candidate",
+      replicates: 10,
+      rng: mulberry32(101),
+      errorRate: 1,
+      errorText: "ECONNREFUSED",
+    });
+
+    const r = detector.compare(EVAL, baseline, dead, FAST);
+    out.push(
+      check(
+        "a total collection failure is never NO_DRIFT",
+        r.verdict !== "NO_DRIFT",
+        `verdict=${r.verdict}`,
+      ),
+    );
+    out.push(
+      check(
+        "and it does not exit 0, because an outage is not a clean run",
+        exitCodeFor(r) !== 0,
+        `exit=${exitCodeFor(r)}`,
+      ),
+    );
+    out.push(
+      check(
+        "it is reported as could-not-look rather than as a weak measurement",
+        r.couldNotLook !== null,
+        `couldNotLook=${String(r.couldNotLook)}`,
+      ),
+    );
+    out.push(
+      check(
+        "and the reason names what failed, because 'could not look' is not actionable",
+        typeof r.couldNotLook === "string" && r.couldNotLook.includes("ECONNREFUSED"),
+        String(r.couldNotLook),
+      ),
+    );
+
+    // THE OTHER HALF, and the reason this scenario cannot be satisfied by refusing everything: a
+    // PARTIAL failure is still a measurement, and a detector that threw those away would be blind
+    // to every real collection, all of which carry some errors. The recorded study lost 30 of 960.
+    const mostlyDead = synthSnapshot(CASES, {
+      label: "candidate",
+      replicates: 10,
+      rng: mulberry32(103),
+      errorRate: 0.5,
+    });
+    const partial = detector.compare(EVAL, baseline, mostlyDead, FAST);
+    out.push(
+      check(
+        "but a partial failure is still a look, and is still measured",
+        partial.couldNotLook === null,
+        `couldNotLook=${String(partial.couldNotLook)}`,
+      ),
+    );
+    out.push(
+      check(
+        "and the dropped calls are counted rather than silently discarded",
+        partial.findings.some((f) => f.errorCount > 0),
+        `errorCounts=${JSON.stringify(partial.findings.map((f) => f.errorCount))}`,
+      ),
+    );
+    return out;
+  },
+};
+
 export const ALL_SCENARIOS: readonly CalibrationScenario[] = [
   aaIsQuiet,
   largeDriftIsCaught,
@@ -517,4 +607,5 @@ export const ALL_SCENARIOS: readonly CalibrationScenario[] = [
   identityChangeIsReportedWithoutAPValue,
   spentSensitivityIsReported,
   metadataDriftIsNotQualityDrift,
+  anOutageIsNotAQuietRun,
 ];

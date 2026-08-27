@@ -1,17 +1,16 @@
 // The commands, and the exit codes they promise.
 //
 // THE EXIT CODE IS THE PRODUCT. Everything else this tool prints is for a person; the exit code is
-// what a pipeline reads, and it is the one output that must never be wrong. Three values, and they
-// mean three different things on purpose:
+// what a pipeline reads, and it is the one output that must never be wrong.
 //
-//   0  nothing confirmed. Includes SUSPECTED_DRIFT, which is printed loudly and does not fail a
-//      build, because a threshold is crossed by noise on exactly the run where noise crosses it.
-//   1  a CONFIRMED regression: a gating metric cleared both nulls and reproduced on an
-//      independently collected arm.
-//   2  the tool could not do its job. A corpus mismatch, a missing file, a usage error, or a
-//      watcher that could not reach the provider. This is deliberately NOT 1: "I could not look"
-//      and "it got worse" are opposite claims, and a pipeline that conflates them will eventually
-//      treat an outage as a passing build.
+// THE CONTRACT LIVES IN `packages/spec/src/exitCodes.ts` AND IS NOT RESTATED HERE. It used to be,
+// and this header described the v0.1 THREE-value contract for an entire release while the code
+// below it imported `EXIT_COULD_NOT_LOOK` from a FOUR-value set - which is defect #6 of this
+// project ("the exit-code contract disagreed with itself") recurring between a file's header and
+// its own body. A contract worth stating once is worth stating exactly once.
+//
+// In one line: 0 nothing confirmed, 1 a confirmed regression, 2 misuse, 3 could not look. Neither 2
+// nor 3 is 1, because neither is evidence the provider got worse.
 //
 // `--gate suspected` is available for a team that would rather investigate a false alarm than miss
 // a real one. It is opt-in so the choice is made deliberately.
@@ -30,6 +29,7 @@ import {
 import {
   ClaudeCliProvider,
   type RunSnapshot,
+  corpusDigestOf,
   runCorpus,
   summariseCost,
 } from "@model-regression-sentinel/run";
@@ -43,10 +43,12 @@ import {
   type Split,
   loadCorpus,
   loadSplit,
+  loadV1Corpus,
 } from "@model-regression-sentinel/spec";
 import {
   GITHUB_ACTIONS_HINT,
   LAUNCHD_HINT,
+  ROTATION_REASONS,
   type RotationReason,
   cronSuggestion,
   debtReport,
@@ -61,7 +63,7 @@ import {
   tickExitCode,
   writeWatchFile,
 } from "@model-regression-sentinel/watch";
-import { type Args, UsageError, bool, flag, required } from "./args.js";
+import { type Args, UsageError, bool, flag, numberFlag, required } from "./args.js";
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
@@ -69,15 +71,35 @@ const out = (text: string): void => {
 
 const corpusRoot = (args: Args): string => flag(args, "corpus", "corpus");
 
-// `both` is kept as the name for "every split" rather than renamed to `all`, because it is what the
-// README, the examples and anyone's existing scripts already pass. It now loads three splits rather
-// than two, which is the additive change v0.2 makes; a run collected with it is NOT comparable
-// against the recorded runs under results/runs/, which were collected on canary plus extended only.
-function casesFor(args: Args): { cases: readonly EvalCase[]; split: Split } {
+// `both` MEANT TWO DIFFERENT CORPORA IN TWO ENTRY POINTS, and that is what `v1` exists to end.
+// Here it resolved to all three splits (34 cases); in `scripts/run-study.mjs` it resolved to canary
+// plus extended (24). So a user could collect with `--split both` and compare against
+// `results/runs/baseline.json` and get NOT_COMPARABLE from a flag whose name and default told them
+// it was the standard set. Both entry points now resolve every name identically:
+//
+//   v1                 canary + extended, 24 cases. The pair the four recorded runs were collected
+//                      against, and the only set whose corpusDigest matches them.
+//   all, both          every split, 34 cases. NOT comparable with results/runs/.
+//   canary|extended|schema   one split.
+function casesFor(args: Args, matchDigest?: string): { cases: readonly EvalCase[]; split: Split } {
+  // No `--split` given and a digest to match: identify the corpus from the artifact itself.
+  if (matchDigest !== undefined && !args.flags.has("split")) {
+    const root = corpusRoot(args);
+    for (const candidate of [loadV1Corpus(root), loadCorpus(root)]) {
+      if (corpusDigestOf(candidate) === matchDigest) {
+        return { cases: candidate, split: "extended" };
+      }
+    }
+    // No match: fall through to the default and let `compare` produce the specific refusal, which
+    // names both digests. Guessing here would replace one wrong corpus with another.
+  }
   const split = flag(args, "split", "both");
-  if (split === "both") return { cases: loadCorpus(corpusRoot(args)), split: "extended" };
+  if (split === "both" || split === "all") {
+    return { cases: loadCorpus(corpusRoot(args)), split: "extended" };
+  }
+  if (split === "v1") return { cases: loadV1Corpus(corpusRoot(args)), split: "extended" };
   if (split !== "canary" && split !== "extended" && split !== "schema") {
-    throw new UsageError(`--split must be canary, extended, schema or both, not "${split}"`);
+    throw new UsageError(`--split must be v1, all, canary, extended or schema, not "${split}"`);
   }
   return { cases: loadSplit(join(corpusRoot(args), split), split), split };
 }
@@ -140,7 +162,11 @@ export function cmdCorpus(args: Args): number {
 export async function cmdRun(args: Args): Promise<number> {
   const { cases, split } = casesFor(args);
   const model = flag(args, "model", "sonnet");
-  const replicates = Number(flag(args, "replicates", "10"));
+  const replicates = numberFlag(args, "replicates", 10, { min: 1, max: 1000, integer: true });
+  // Read BEFORE the --yes gate even though it is only used after it. A flag validated only on the
+  // path that spends money is a flag whose rejection arrives after the decision to spend: the plan
+  // a person reads has to be the plan that runs, including its refusals.
+  const concurrency = numberFlag(args, "concurrency", 6, { min: 1, max: 64, integer: true });
   const label = flag(args, "label", "run");
   const dir = flag(args, "out", join("results", "runs"));
 
@@ -167,7 +193,7 @@ export async function cmdRun(args: Args): Promise<number> {
   }
   const snapshot = await runCorpus(provider, cases, split, {
     replicates,
-    concurrency: Number(flag(args, "concurrency", "6")),
+    concurrency,
     label,
   });
   mkdirSync(dir, { recursive: true });
@@ -184,17 +210,26 @@ export async function cmdRun(args: Args): Promise<number> {
 
 /** `sentinel compare` - the headline command. */
 export function cmdCompare(args: Args): number {
-  const { cases } = casesFor(args);
   const baseline = readSnapshot(required(args, "baseline"));
   const candidate = readSnapshot(required(args, "candidate"));
+  // THE SNAPSHOT KNOWS WHICH CORPUS IT WAS COLLECTED AGAINST, so the tool reads it rather than
+  // making the caller remember. `compare` refuses a case list whose digest does not match the runs,
+  // which is correct and would otherwise mean the DEFAULT invocation on the v0.1 recorded runs -
+  // the one in this project's own quickstart - exits 2 for a corpus the user never chose.
+  //
+  // An EXPLICIT `--split` is still honoured, and still refused when it disagrees. Being helpful by
+  // default and exact when asked is the right pair; silently loading a corpus the caller named
+  // wrongly would be neither.
+  const { cases, split } = casesFor(args, baseline.corpusDigest);
   const confirmPath = args.flags.get("confirm");
   const confirmation = confirmPath === undefined ? undefined : readSnapshot(confirmPath);
 
   const result = compare(cases, baseline, candidate, {
-    alpha: Number(flag(args, "alpha", "0.05")),
+    // Bounded on both sides, exclusively: alpha 0 can never reject and alpha 1 always does.
+    alpha: numberFlag(args, "alpha", 0.05, { min: 1e-6, max: 0.5 }),
     ...(confirmation === undefined ? {} : { confirmation }),
     ...(args.flags.has("target-effect")
-      ? { targetEffect: Number(required(args, "target-effect")) }
+      ? { targetEffect: numberFlag(args, "target-effect", 0, { min: 1e-6, max: 1 }) }
       : {}),
   });
 
@@ -208,7 +243,13 @@ export function cmdCompare(args: Args): number {
     ...(confirmation === undefined ? {} : { confirmationLabel: confirmation.label }),
   };
 
+  // AN UNRECOGNISED FORMAT IS MISUSE, NOT A DEFAULT. `--format html` used to render text, exit 0,
+  // AND silently drop the drift-gate ledger, because the ledger is printed only when the format is
+  // exactly "text" - so an unsupported value produced a quietly shorter report that looked complete.
   const format = flag(args, "format", "text");
+  if (!["text", "json", "md", "markdown"].includes(format)) {
+    throw new UsageError(`--format must be text, md or json, not "${format}"`);
+  }
   const rendered =
     format === "json"
       ? renderJson(result, context)
@@ -224,9 +265,27 @@ export function cmdCompare(args: Args): number {
     out(`written to ${target}`);
   }
 
-  if (format === "text" && target === undefined) out(renderGates(gatesFor(result)));
+  const gateChoice: "confirmed" | "suspected" =
+    bool(args, "gate-suspected") || flag(args, "gate", "confirmed") === "suspected"
+      ? "suspected"
+      : "confirmed";
+  // The ledger is told which gate it is reporting under. `renderGates` hardcoded "confirmed", so a
+  // run under --gate suspected printed "exit 0 under the default gate" in a footer while the
+  // process exited 1 - the one place a reader looks to find out what the run decided.
+  if (format === "text" && target === undefined) out(renderGates(gatesFor(result), gateChoice));
 
-  const gate = bool(args, "gate-suspected") || flag(args, "gate", "confirmed") === "suspected";
+  // Exit 3 for an arm that never reached the provider is decided by `exitCodeFor`, from
+  // `result.couldNotLook`, so the number the report prints and the number the process returns come
+  // from one place and cannot disagree.
+  // AND AN UNRECOGNISED GATE IS MISUSE FOR A SHARPER REASON. `--gate suspcted` fell back to
+  // "confirmed", so an operator who deliberately asked for the STRICTER gate silently got the
+  // looser one and a passing exit. A typo that quietly relaxes a safety setting is the worst
+  // possible direction for a default to lean.
+  const gateFlag = flag(args, "gate", "confirmed");
+  if (gateFlag !== "confirmed" && gateFlag !== "suspected") {
+    throw new UsageError(`--gate must be confirmed or suspected, not "${gateFlag}"`);
+  }
+  const gate = bool(args, "gate-suspected") || gateFlag === "suspected";
   return exitCodeFor(result, gate ? "suspected" : "confirmed");
 }
 
@@ -280,7 +339,7 @@ export async function cmdWatch(args: Args): Promise<number> {
     out(`state at ${statePath}`);
     out("");
     out("Your scheduler owns the schedule. There is no daemon:");
-    out(`  ${cronSuggestion(Number(flag(args, "every", "60")))}`);
+    out(`  ${cronSuggestion(numberFlag(args, "every", 60, { min: 1, integer: true }))}`);
     return EXIT_OK;
   }
 
@@ -298,8 +357,8 @@ export async function cmdWatch(args: Args): Promise<number> {
     // reporting quiet, which is what `could_not_look` is for.
     const provider = new ClaudeCliProvider(file.requestedModel);
     snapshot = await runCorpus(provider, cases, split, {
-      replicates: Number(flag(args, "replicates", "3")),
-      concurrency: Number(flag(args, "concurrency", "4")),
+      replicates: numberFlag(args, "replicates", 3, { min: 1, max: 1000, integer: true }),
+      concurrency: numberFlag(args, "concurrency", 4, { min: 1, max: 64, integer: true }),
       label: "tick",
     });
   }
@@ -349,7 +408,15 @@ export function cmdBaseline(args: Args): number {
   const file = readWatchFile(statePath);
   const { cases } = casesFor(args);
   const candidate = readSnapshot(required(args, "baseline"));
-  const reason = flag(args, "reason", "operator") as RotationReason;
+  // A CLOSED UNION, CHECKED RATHER THAN CAST. `as RotationReason` wrote whatever was typed into the
+  // permanent rotation history, where every later reader switches on the union and falls through.
+  const reasonFlag = flag(args, "reason", "operator");
+  if (!ROTATION_REASONS.includes(reasonFlag as RotationReason)) {
+    throw new UsageError(
+      `--reason must be one of: ${ROTATION_REASONS.join(", ")}, not "${reasonFlag}"`,
+    );
+  }
+  const reason = reasonFlag as RotationReason;
 
   // Seedability is computed here rather than inside the planner, because grading is the caller's
   // job and `extractMetrics` is the only thing allowed to decide what passed.
@@ -433,7 +500,7 @@ export function cmdBaseline(args: Args): number {
 
 /** `sentinel schedule` - copy-pasteable scheduler wiring. There is deliberately no daemon. */
 export function cmdSchedule(args: Args): number {
-  const every = Number(flag(args, "every", "60"));
+  const every = numberFlag(args, "every", 60, { min: 1, integer: true });
   out("There is no daemon. A long-running process needs a real clock and real timers, which the");
   out(
     "contract tests forbid in anything testable, and a drift sequence has to replay deterministically.",

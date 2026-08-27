@@ -46,10 +46,22 @@ import {
 
 const TIMEOUT_MS = 120_000;
 
+/**
+ * The seam a test replaces. Structurally a subset of `fetch`.
+ *
+ * `text()` is here so a non-200 body can be read: without it the type could not express the one
+ * diagnostic a 4xx carries, and the adapter returned `HTTP 400: unexpected status` with nothing to
+ * act on. Optional, so an existing fake transport keeps compiling and simply yields no detail.
+ */
 export type Fetcher = (
   url: string,
   init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal },
-) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+  text?: () => Promise<string>;
+}>;
 
 interface HttpOptions {
   readonly apiKeyEnv?: string;
@@ -125,7 +137,30 @@ abstract class HttpProvider implements Provider {
       });
       const apiMs = Number(process.hrtime.bigint() - started) / 1e6;
       if (!res.ok) {
-        return { error: `HTTP ${res.status}: ${httpCondition(res.status)}`, wallMs: apiMs };
+        // THE BODY IS THE ONLY DIAGNOSTIC A 4xx HAS, and discarding it made the most likely
+        // first-call outcome unreadable: `HTTP 400: unexpected status` is consistent with a bad
+        // model id, an unsupported parameter, a schema the endpoint rejected, and a malformed
+        // request, and nothing in the record distinguishes them.
+        //
+        // BOUNDED AND SANITISED, because it is text this process did not author. Capped at 300
+        // characters, newlines flattened, and any value that looks like a key redacted - a provider
+        // that echoes the request back in an error body would otherwise write a credential into an
+        // artifact that gets committed.
+        let detail = "";
+        try {
+          const raw = res.text === undefined ? "" : await res.text();
+          detail = raw
+            .replace(/\s+/g, " ")
+            .replace(/(sk-|xai-|key-)[A-Za-z0-9_-]{8,}/g, "$1REDACTED")
+            .slice(0, 300)
+            .trim();
+        } catch {
+          detail = "(the error body could not be read)";
+        }
+        return {
+          error: `HTTP ${res.status}: ${httpCondition(res.status)}${detail === "" ? "" : ` - ${detail}`}`,
+          wallMs: apiMs,
+        };
       }
       return { doc: await res.json(), apiMs };
     } catch (cause) {
@@ -153,6 +188,8 @@ interface AnthropicUsage {
   readonly output_tokens?: number;
   readonly cache_read_input_tokens?: number;
   readonly cache_creation_input_tokens?: number;
+  /** Returned by the Messages API. `claudeCli.ts` reads the same field from the same block. */
+  readonly service_tier?: string;
 }
 /** Every field optional and every block nullable, because this is decoded JSON and not a promise. */
 interface AnthropicDoc {
@@ -184,6 +221,22 @@ export class AnthropicApiProvider extends HttpProvider {
       messages: [{ role: "user", content: request.user }],
       max_tokens: request.maxOutputTokens ?? 1024,
     };
+    // THE SCHEMA WAS BEING SILENTLY DROPPED, and the consequence was a false CONFIRMED_DRIFT.
+    //
+    // 12 of the 34 corpus cases carry a `jsonSchema`, `schemaValid` is a GATING metric, and the
+    // OpenAI adapter sends the schema while this one did not. So an Anthropic-BYOK arm answered
+    // schema cases with prompt-only JSON while a `claude_cli` baseline used constrained decoding -
+    // and because `requestKey` hashes the schema, both arms still produce the SAME corpusDigest, so
+    // `compare` accepts them as comparable and any schemaValid drop fails the build as a model
+    // regression when it is entirely an adapter gap.
+    //
+    // The Messages API has no `response_format`, so the schema goes in the system prompt as an
+    // instruction. THAT IS WEAKER THAN CONSTRAINED DECODING and the difference is recorded in
+    // metadata as a `schemaMode`, because comparing an instructed arm against a constrained one is
+    // comparing two different experiments and the report has to be able to say so.
+    if (request.jsonSchema !== undefined) {
+      body.system = `${request.system}\n\nReply with JSON only, matching this JSON Schema exactly. No prose, no code fence.\n${JSON.stringify(request.jsonSchema)}`;
+    }
     const out = await this.post(
       "https://api.anthropic.com/v1/messages",
       {
@@ -227,7 +280,12 @@ export class AnthropicApiProvider extends HttpProvider {
       canonicalModel: "",
       contextWindow: null,
       maxOutputTokens: null,
-      serviceTier: "",
+      // "" means `not_exposed` - "the provider was asked and does not report this". For a BYOK
+      // adapter that is FALSE: the Messages API does return `usage.service_tier`, which
+      // `claudeCli.ts` already reads from the same upstream block. Recording not_exposed here made
+      // a claim about the provider out of a fact about this adapter, and diffing a CLI baseline
+      // against a BYOK candidate then produced a `disappeared` row - a fabricated finding.
+      serviceTier: usage.service_tier ?? "",
       costBasis: "",
       stopReason,
       error: "",
@@ -327,6 +385,11 @@ export class OpenAiCompatibleProvider extends HttpProvider {
       canonicalModel: "",
       contextWindow: null,
       maxOutputTokens: null,
+      // not_exposed, and here that is TRUE rather than a shortcut. This adapter deliberately
+      // targets the generic /v1/chat/completions shape, which vLLM, Ollama, Together and
+      // OpenRouter also speak and none of them reports a service tier. Reading an OpenAI-specific
+      // field would make this a claim about one vendor rather than about the wire format, which
+      // is the opposite of what this adapter exists to demonstrate.
       serviceTier: "",
       costBasis: "",
       stopReason,

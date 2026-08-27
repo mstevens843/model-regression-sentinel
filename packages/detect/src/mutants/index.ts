@@ -23,6 +23,7 @@ import { hidesDebt } from "./hidesDebt.js";
 import { meanLatencyGate } from "./meanLatencyGate.js";
 import { metadataIsRegression } from "./metadataIsRegression.js";
 import { noConfirmation } from "./noConfirmation.js";
+import { outageIsQuiet } from "./outageIsQuiet.js";
 import { peeks } from "./peeks.js";
 import { rawDiff } from "./rawDiff.js";
 import { singleReplicateOk } from "./singleReplicateOk.js";
@@ -85,7 +86,12 @@ export const ALL_MUTANTS: readonly DetectorMutant[] = [
     id: "singleReplicateOk",
     description:
       "returns a confident verdict from one draw per case, where no noise estimate exists",
-    mustFail: ["07"],
+    // 13 as well as 07, and the overlap is real rather than a blunt scenario. This mutant overwrites
+    // ANY INCONCLUSIVE with NO_DRIFT, and "the arm never reached the provider" is one of the two
+    // things INCONCLUSIVE means - so a detector that stops distinguishing thin evidence from a
+    // confident answer also stops distinguishing no evidence from one. Two named mistakes turn out
+    // to be one deletion.
+    mustFail: ["07", "13"],
     detector: singleReplicateOk,
   },
   {
@@ -93,6 +99,13 @@ export const ALL_MUTANTS: readonly DetectorMutant[] = [
     description: "reports a healthy wealth while it has quietly gone blind, so nobody re-baselines",
     mustFail: ["11"],
     detector: hidesDebt,
+  },
+  {
+    id: "outageIsQuiet",
+    description:
+      "reports a collection that failed as a collection that found nothing, at exit 0, forever",
+    mustFail: ["13"],
+    detector: outageIsQuiet,
   },
   {
     id: "metadataIsRegression",
@@ -114,4 +127,5 @@ export {
   singleReplicateOk,
   hidesDebt,
   metadataIsRegression,
+  outageIsQuiet,
 };

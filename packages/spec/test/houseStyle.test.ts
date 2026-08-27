@@ -29,13 +29,23 @@ const SKIP = new Set(["node_modules", "dist", ".turbo", ".git", "coverage", "bas
  * in a data file. So the scan skips them, deliberately and on the record, rather than the rule being
  * quietly weakened everywhere.
  */
-const EVIDENCE = new Set(["runs"]);
+// Any directory of RECORDED PROVIDER OUTPUT, not just the first one.
+//
+// This was `["runs"]`, and the first fresh collection landed in `results/runs-v2/` - so the style
+// scan reached bytes the model wrote and the suite went red for a dash the provider chose. The
+// exclusion is about what the bytes ARE, not about which directory they happen to be in: a recorded
+// output is evidence, every grader re-derives its verdict from that exact text, and rewriting one
+// to satisfy a style rule would falsify the measurement.
+//
+// The guard below is what keeps this from becoming a blanket: every excluded directory must
+// actually contain recorded runs, checked file by file.
+const EVIDENCE_DIRS = (name: string): boolean => name === "runs" || name.startsWith("runs-");
 const TEXT = /\.(ts|tsx|mjs|js|json|md|yml|yaml|sh|txt)$/;
 
 function walk(dir: string): readonly string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (SKIP.has(entry) || EVIDENCE.has(entry)) continue;
+    if (SKIP.has(entry) || EVIDENCE_DIRS(entry)) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) out.push(...walk(full));
     else if (TEXT.test(entry)) out.push(full);
@@ -108,13 +118,26 @@ describe("house style", () => {
   it("keeps the recorded runs verbatim, which is why the dash scan skips them", () => {
     // Guards the exclusion above from becoming a blanket. If `results/runs/` ever stops holding
     // recorded provider output, this exclusion has to be revisited rather than inherited.
-    const runs = join(REPO, "results", "runs");
-    if (!existsSync(runs)) return;
-    for (const entry of readdirSync(runs)) {
-      const snapshot = JSON.parse(readFileSync(join(runs, entry), "utf8")) as {
-        readonly records?: readonly unknown[];
-      };
-      expect(Array.isArray(snapshot.records), `${entry} is not a recorded run`).toBe(true);
+    const results = join(REPO, "results");
+    if (!existsSync(results)) return;
+    const excluded = readdirSync(results).filter(EVIDENCE_DIRS);
+    // The exclusion must cover something, or this test certifies an empty set.
+    expect(
+      excluded.length,
+      "no recorded-run directory exists to justify the exclusion",
+    ).toBeGreaterThan(0);
+    for (const dir of excluded) {
+      const runs = join(results, dir);
+      const entries = readdirSync(runs).filter((f) => f.endsWith(".json"));
+      expect(entries.length, `${dir} is excluded from the dash scan and is empty`).toBeGreaterThan(
+        0,
+      );
+      for (const entry of entries) {
+        const snapshot = JSON.parse(readFileSync(join(runs, entry), "utf8")) as {
+          readonly records?: readonly unknown[];
+        };
+        expect(Array.isArray(snapshot.records), `${dir}/${entry} is not a recorded run`).toBe(true);
+      }
     }
   });
 

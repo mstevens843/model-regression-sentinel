@@ -72,8 +72,25 @@ export const EXIT_CODES: readonly ExitCodeMeaning[] = [
   },
 ];
 
-export const describeExit = (code: ExitCode): ExitCodeMeaning =>
-  EXIT_CODES.find((e) => e.code === code) ?? (EXIT_CODES[2] as ExitCodeMeaning);
+/**
+ * The meaning of a code, for a code in the set.
+ *
+ * IT USED TO FALL BACK TO `EXIT_CODES[2]`, silently describing an out-of-range value as "misuse" in
+ * a module whose header calls this set closed. Anything outside the set is a bug in this tool rather
+ * than a signal, and the one thing a describer must not do is invent a meaning for it - a pipeline
+ * logging "misuse" for a code the tool never defined sends someone to check an invocation that was
+ * fine.
+ */
+export const describeExit = (code: number): ExitCodeMeaning => {
+  const found = EXIT_CODES.find((e) => e.code === code);
+  if (found !== undefined) return found;
+  return {
+    code: 2,
+    name: "undefined exit code",
+    meaning: `exit ${code} is not in this tool's contract, which is a closed set of 0, 1, 2 and 3`,
+    action: "treat this as a bug in the tool. Nothing about the provider follows from it",
+  };
+};
 
 /** Rendered under `--help` and at the foot of a text report, so the contract travels with the tool. */
 export const EXIT_CODE_HELP: string = EXIT_CODES.map(

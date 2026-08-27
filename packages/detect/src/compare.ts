@@ -57,10 +57,16 @@ import {
   type MetadataChange,
   type ProviderMetadata,
   type RunSnapshot,
+  corpusDigestOf,
   diffMetadata,
   fingerprintDiff,
 } from "@model-regression-sentinel/run";
-import { type EvalCase, GATING_METRICS, type MetricKey } from "@model-regression-sentinel/spec";
+import {
+  DEGRADATION_DIRECTION,
+  type EvalCase,
+  GATING_METRICS,
+  type MetricKey,
+} from "@model-regression-sentinel/spec";
 import { type MdeResult, minimumDetectableEffect, minimumDetectableRelativeEffect } from "./mde.js";
 import { type MetricSamples, extractMetrics, pairCases } from "./metrics.js";
 import {
@@ -70,6 +76,7 @@ import {
   calibratedP,
   nullQuantile,
 } from "./nullCalibration.js";
+import { observedNothing } from "./observed.js";
 import { type PermutationResult, signFlipTest } from "./permutation.js";
 import { type Rng, mulberry32 } from "./rng.js";
 import {
@@ -82,6 +89,7 @@ import {
   mannWhitneyU,
   mean,
   median,
+  symmetricRelative,
 } from "./stats.js";
 
 export type Verdict =
@@ -182,6 +190,38 @@ export interface CompareResult {
   readonly suspectedMetrics: readonly MetricKey[];
   /** Metrics where nothing was found and nothing could have been. */
   readonly underpoweredMetrics: readonly MetricKey[];
+  /**
+   * Why one of the arms was not an observation, or null when all of them were.
+   *
+   * INCONCLUSIVE HAS TWO CAUSES AND THEY ARE NOT THE SAME EVENT. "the suite could not resolve an
+   * effect this small" is a statement about statistical power and the right response is more
+   * replicates. "the candidate arm never reached the provider" is an outage and the right response
+   * is to fix the collection and run it again. Collapsing them loses the distinction at exactly the
+   * moment it matters, so the second carries a sentence and the first carries null - and
+   * `exitCodeFor` reads this field to tell 3 from 0.
+   */
+  readonly couldNotLook: string | null;
+  /**
+   * False when either arm never observed an identity, so the fingerprints could not be compared.
+   *
+   * AN EMPTY CHANGE LIST MEANT TWO THINGS. `identityChangesOf` returns `[]` both when every field
+   * held the same value and when a fingerprint is `null` - which `runner.ts` sets whenever no call
+   * in an arm succeeded. The ledger read the empty list as agreement and printed
+   * "identity/fingerprint PASS - no recorded identity field moved between the two arms", which is
+   * "we could not look" wearing a PASS. Same category error as `metadataChanges`, which already
+   * emits an indeterminate row for exactly this reason.
+   */
+  readonly identityComparable: boolean;
+  /**
+   * Cases that were LOADED but produced records in neither arm, sorted.
+   *
+   * Nothing tells a user about these otherwise, and the default invocation produces them: `--split
+   * both` loads all 34 cases while the four recorded runs contain records for 24, so 10 schema
+   * cases sit in `cases` and contribute nothing. The report then said `schemaValid` rested on 2
+   * cases without ever mentioning that 10 more had been loaded and never run, which reads as a
+   * property of the corpus when it is a property of the runs.
+   */
+  readonly casesNotInEitherArm: readonly string[];
 }
 
 export function compare(
@@ -194,9 +234,16 @@ export function compare(
   const fdrQ = options.fdrQ ?? 0.1;
   const rng: Rng = mulberry32(options.seed ?? 20260826);
 
-  const shell = (verdict: Verdict, reason: string): CompareResult => ({
+  const shell = (
+    verdict: Verdict,
+    reason: string,
+    couldNotLook: string | null = null,
+  ): CompareResult => ({
     verdict,
     reason,
+    couldNotLook,
+    identityComparable: baseline.fingerprint !== null && candidate.fingerprint !== null,
+    casesNotInEitherArm: [],
     alpha,
     findings: [],
     identityChanges: identityChangesOf(baseline, candidate),
@@ -221,12 +268,79 @@ export function compare(
       "the two runs were collected against different rendered corpora, so any difference between them is a difference of experiment rather than of provider. Re-run both arms against one frozen corpus.",
     );
   }
+  // THE THIRD PARTY TO EVERY COMPARISON IS THE CASE LIST, AND IT WAS NEVER CHECKED.
+  //
+  // The guard above compares the two snapshots to EACH OTHER. Nothing compared either of them to
+  // the corpus this call was handed, so `compare` would happily analyse a run using a case list it
+  // was not collected against - pairing whatever ids happened to overlap and silently dropping the
+  // rest. That is not a degraded measurement, it is a different experiment wearing the same name.
+  //
+  // MEASURED ON THIS REPOSITORY'S OWN ARTIFACTS. The v0.2 runs contain records for 34 cases. Handed
+  // the 24-case v0.1 list, the SAME two snapshots produce:
+  //
+  //     case list          verdict         schemaValid       exit
+  //     all 34 (correct)   NO_DRIFT        10 cases, mde .25    0
+  //     v1 24 (wrong)      INCONCLUSIVE     2 cases, mde null    0
+  //
+  // Ten cases whose records are sitting in the snapshot are discarded, the gating metric is computed
+  // on a fifth of its evidence, the verdict flips, and both invocations exit 0. Nothing warned. A
+  // tool whose answer depends on an argument nobody was told to get right is the exact failure this
+  // project exists to prevent.
+  //
+  // NOT_COMPARABLE AND EXIT 2, because this is misuse: the invocation is wrong and the fix is to
+  // change it. Nothing is known about the provider from a run analysed against the wrong corpus.
+  const casesDigest = corpusDigestOf(cases);
+  for (const [arm, snapshot] of [
+    ["baseline", baseline],
+    ["candidate", candidate],
+    ...(options.confirmation === undefined
+      ? []
+      : ([["confirmation", options.confirmation]] as const)),
+  ] as const) {
+    if (snapshot.corpusDigest !== casesDigest) {
+      return shell(
+        "NOT_COMPARABLE",
+        `the ${arm} arm was collected against corpus digest ${snapshot.corpusDigest.slice(0, 16)} and this comparison was handed ${cases.length} case(s) rendering to ${casesDigest.slice(0, 16)}. Analysing a run against a corpus it was not collected on pairs only the ids that happen to overlap and silently drops the rest, which changes the answer rather than weakening it. Load the corpus these runs were collected against.`,
+      );
+    }
+  }
+
+  // AN ARM THAT OBSERVED NOTHING IS NOT AN ARM THAT OBSERVED NO CHANGE. Checked here, before any
+  // metric is extracted, because `extractMetrics` drops errored calls: a totally failed arm produces
+  // an EMPTY metric map, an empty findings list, and - until this guard existed - a fall through to
+  // the branch that says the suite had the power to see a movement. See ./observed.ts.
+  for (const [arm, snapshot] of [
+    ["baseline", baseline],
+    ["candidate", candidate],
+    ...(options.confirmation === undefined
+      ? []
+      : ([["confirmation", options.confirmation]] as const)),
+  ] as const) {
+    const blind = observedNothing(snapshot, `${arm} arm`);
+    if (blind !== null) {
+      return shell(
+        "INCONCLUSIVE",
+        `${blind} Nothing was measured, so nothing is known about the provider from this comparison. This is not a report that nothing changed: those are opposite claims, and only one of them is supported.`,
+        blind,
+      );
+    }
+  }
+
   if (baseline.replicates < 2 || candidate.replicates < 2) {
     return shell(
       "INCONCLUSIVE",
       `replicates are ${baseline.replicates} and ${candidate.replicates}. With fewer than two draws per case there is nothing to estimate run-to-run variability from, so drift and noise cannot be separated even in principle.`,
     );
   }
+
+  // Computed from the ids the snapshots actually recorded, not from the metrics map, so a case that
+  // errored on every call still counts as present: it WAS run, and its absence from the samples is
+  // reported separately as an error count.
+  const ranIds = new Set([...baseline.caseIds, ...candidate.caseIds]);
+  const casesNotInEitherArm = cases
+    .map((c) => String(c.id))
+    .filter((id) => !ranIds.has(id))
+    .sort();
 
   const exchangeable = baseline.replicates === candidate.replicates;
   const baseMetrics = extractMetrics(cases, baseline);
@@ -303,6 +417,14 @@ export function compare(
       options.confirmation === undefined
         ? `${suspectedMetrics.join(", ")} cleared both nulls on a single comparison. That is not yet a confirmed regression: collect an independent candidate run and pass it as the confirmation arm. A single crossing is exactly what noise produces on the run where it happens to.`
         : `${suspectedMetrics.join(", ")} cleared both nulls but did not reproduce on the confirmation run, which is what a false alarm looks like.`;
+  } else if (gating.length === 0) {
+    // A BACKSTOP, not the primary guard - `observedNothing` above catches the reachable route. Any
+    // future path that empties `findings` must land on INCONCLUSIVE rather than inherit NO_DRIFT
+    // from an `else`, because "no gating metric produced a finding" and "no gating metric moved"
+    // are the two claims this whole package exists to keep apart.
+    verdict = "INCONCLUSIVE";
+    reason =
+      "no gating metric produced a comparable sample in these two runs, so none of them was checked. Nothing is known about the provider from this comparison.";
   } else if (underpowered.length === gating.length && gating.length > 0) {
     verdict = "INCONCLUSIVE";
     reason = `no gating metric moved detectably, and at ${baseline.replicates} replicates across ${gating[0]?.cases ?? 0} cases the suite could not have detected the effects it searched for. This is not evidence that nothing changed.`;
@@ -317,6 +439,9 @@ export function compare(
   return {
     verdict,
     reason,
+    couldNotLook: null,
+    identityComparable: baseline.fingerprint !== null && candidate.fingerprint !== null,
+    casesNotInEitherArm,
     alpha,
     findings,
     identityChanges,
@@ -349,6 +474,11 @@ export function exitCodeFor(
   result: CompareResult,
   gate: "confirmed" | "suspected" = "confirmed",
 ): number {
+  // 3 BEFORE EVERYTHING ELSE. An arm that never reached the provider is an outage, and an outage is
+  // not a passing build. This is checked ahead of the verdict because such a run is INCONCLUSIVE,
+  // which otherwise maps to 0 - and 0 is the value that would let a week of silent collection
+  // failures read as a week of clean runs.
+  if (result.couldNotLook !== null) return 3;
   if (result.verdict === "NOT_COMPARABLE") return 2;
   if (result.verdict === "CONFIRMED_DRIFT") return 1;
   if (gate === "suspected" && result.verdict === "SUSPECTED_DRIFT") return 1;
@@ -492,6 +622,10 @@ function analyse(
           {
             alpha: options.alpha,
             seed: 20260826,
+            // `refusal` degrades UPWARD. Simulating a drop in it searched a direction that cannot
+            // happen on a healthy corpus, so its MDE never resolved and it blocked NO_DRIFT on
+            // every corpus - not only on one short of schema cases.
+            direction: DEGRADATION_DIRECTION[metric],
             ...(options.targetEffect === undefined ? {} : { targetEffect: options.targetEffect }),
           },
         )
@@ -539,17 +673,6 @@ function analyse(
  * exactly how an earlier version came to print a latency noise floor of several hundred thousand
  * percent.
  */
-/**
- * The symmetric percent difference, bounded in [-2, 2].
- *
- * Zero when both sides are zero, which is the right answer rather than a guard: two arms that both
- * produced nothing did not differ.
- */
-export function symmetricRelative(candidate: number, baseline: number): number {
-  const total = candidate + baseline;
-  return total === 0 ? 0 : (2 * (candidate - baseline)) / total;
-}
-
 function relativeCalibration(
   absolute: NullCalibration,
   perCase: readonly CaseSamples[],

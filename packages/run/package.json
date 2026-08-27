@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/run",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Provider-agnostic BYOK execution of frozen cases, recording resolved model identity, three separate latency figures, token counts and two cost bounds.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -34,7 +34,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

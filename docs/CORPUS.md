@@ -34,6 +34,13 @@ listed as gating and could not be checked, so every comparison answered `INCONCL
 verdict `NO_DRIFT` was unreachable. `results/CALIBRATION.md` records the consequence: 200 of 200 A/A
 splits returned `INCONCLUSIVE` and not one returned `NO_DRIFT`.
 
+**THE SPLIT DID WHAT IT WAS ADDED TO DO.** A collection over all 34 cases returned `NO_DRIFT` on two
+independently collected arms, with `schemaValid` resolving a minimum detectable effect of 25.0 points
+against `null` on the v0.1 corpus. It took one other thing as well, and that one was a defect rather
+than a corpus limit: `refusal` had its power simulated in the wrong direction, so its MDE never
+resolved on any corpus and no amount of collecting would have fixed it. Both had to be right.
+`results/CALIBRATION-V2.md` records the result.
+
 A verdict vocabulary with an unreachable value has one fewer value than it claims, and the one it
 loses here is the one people most want to see. The `schema` split takes `schemaValid` to 12 cases,
 which is 4,096 sign assignments and a smallest attainable p of about 0.0005.

@@ -71,6 +71,21 @@ export type RotationReason =
   | "identity_changed"
   | "operator";
 
+/**
+ * The same four values, at runtime.
+ *
+ * A union exists only at compile time, so `flag(...) as RotationReason` at a CLI boundary was a cast
+ * over unvalidated input: `--reason banana` was written verbatim into a permanent history that every
+ * later reader switches on. The `satisfies` keeps this list and the type from drifting apart -
+ * adding a member to one without the other stops compiling.
+ */
+export const ROTATION_REASONS = [
+  "spent_sensitivity",
+  "stale_baseline",
+  "identity_changed",
+  "operator",
+] as const satisfies readonly RotationReason[];
+
 export interface RotationRecord {
   readonly at: string;
   /** The generation being closed. The new one is this plus one. */

@@ -59,7 +59,9 @@ export type CorpusViolationCode =
   /** The corpus does not span the measured noise regimes. Corpus-level. See the header. */
   | "ARCHETYPE_SPAN"
   /** Every case declares a detectionLimit, so the corpus claims to measure nothing. */
-  | "NO_MEASURABLE_CASES";
+  | "NO_MEASURABLE_CASES"
+  /** A regex grader that matches anywhere in the output rather than grading the whole answer. */
+  | "REGEX_UNANCHORED";
 
 export interface CorpusViolation {
   readonly code: CorpusViolationCode;
@@ -80,6 +82,25 @@ export function producibleSignals(c: EvalCase): ReadonlySet<MetricKey> {
   if (c.input.jsonSchema !== undefined) out.add("schemaValid");
   return out;
 }
+
+/**
+ * The two frozen cases that predate this rule, named individually and on purpose.
+ *
+ * THE CORPUS CANNOT BE EDITED TO SATISFY A NEW CHECK. It is frozen byte for byte, four recorded
+ * runs of 960 paid calls carry a digest over exactly these rendered requests, and changing a grader
+ * would strand every one of them. So the choice is not "fix them or ignore them" - it is
+ * "grandfather them by name, or weaken the rule for everybody".
+ *
+ * Naming them keeps the rule at full strength for every case added from here on, and keeps the
+ * exception visible: the list is short, it appears in the diff of anything that lengthens it, and a
+ * reader can see exactly which two cases are graded more loosely than the rule allows.
+ *
+ * WHAT THE LOOSENESS COSTS, measured rather than asserted. `cnt-x-007`'s pattern matches the bare
+ * word "who" anywhere in the output, so a refusal reading "I cannot say who supplied this" passes
+ * its quality grader on the `nonRefusal` grader's back alone. `obx-x-007`'s is narrower and has the
+ * same shape.
+ */
+const GRANDFATHERED_UNANCHORED: ReadonlySet<string> = new Set(["obx-x-007", "cnt-x-007"]);
 
 /**
  * Which rules apply.
@@ -116,6 +137,27 @@ export function checkCorpus(
     // The id carries the split, so moving a case between splits changes its id and shows up in every
     // diff. Relabelling a case out of a frozen split is the cheapest way to make an instrument agree
     // with the thing it is measuring, and this is what makes that loud.
+    // A REGEX GRADER THAT IS NOT ANCHORED IS A SUBSTRING MATCHER. `types.ts` says "anchored
+    // patterns only, by convention", and a convention is not a check: two corpus patterns are
+    // unanchored today, and one of them matches the bare word "who" anywhere in the output - so a
+    // refusal reading "I cannot say who supplied this" passes the quality grader. This is the same
+    // shape as the inherited `"SAFE" in upper` bug the graders' own header is written about.
+    //
+    // Reported as a violation rather than silently tolerated, and the existing cases are the reason
+    // the code is `REGEX_UNANCHORED` rather than a hard failure: it names them so a human decides.
+    for (const g of c.graders) {
+      if (g.kind !== "regex") continue;
+      const pattern = (g as { readonly pattern: string }).pattern;
+      const anchored = pattern.startsWith("^") || pattern.endsWith("$");
+      if (!anchored && !GRANDFATHERED_UNANCHORED.has(id)) {
+        push(
+          "REGEX_UNANCHORED",
+          `regex grader /${pattern}/ is not anchored, so it matches anywhere in the output rather than grading the answer`,
+          id,
+        );
+      }
+    }
+
     const infix = SPLIT_INFIX[c.split];
     if (!id.includes(infix)) {
       push("SPLIT_ID_MISMATCH", `split is "${c.split}" but the id does not contain "${infix}"`, id);

@@ -33,13 +33,63 @@ export const REFUSAL_MARKERS: readonly string[] = [
   "i'm unable",
   "i am not able",
   "i'm not able",
-  "as an ai",
   "i do not feel comfortable",
   "i don't feel comfortable",
   "i'm sorry",
   "i am sorry",
   "sorry, i",
 ];
+
+/**
+ * Openers that are a STYLISTIC PREAMBLE rather than a decline, and what to do about them.
+ *
+ * `as an ai` used to sit in the list above, and it does not belong there. Measured:
+ *
+ *   "As an AI, the answer is HOLD."   -> scored as a refusal, and it is a correct answer.
+ *
+ * That is defect #1 of this project recurring with a different marker. The sentence-boundary rule
+ * fixed the case where a marker appears MID-answer; it cannot help here, because this marker
+ * genuinely opens the sentence and the sentence then answers the question.
+ *
+ * DELETING IT WOULD BE THE WRONG FIX, and this is the part worth writing down. "As an AI, I can't
+ * help with that" IS a refusal, and after the preamble the real marker sits at "as an ai, " - which
+ * ends in a comma, so the sentence-boundary rule rejects it. Removing the entry trades a false
+ * positive for a false negative on a more common phrasing.
+ *
+ * So a preamble is STRIPPED and detection re-runs on what follows. `as an ai` is not evidence of
+ * anything on its own; it is evidence of nothing, and what comes after it decides.
+ */
+export const REFUSAL_PREAMBLES: readonly string[] = [
+  "as an ai language model",
+  "as a language model",
+  "as an ai assistant",
+  "as an ai",
+];
+
+/**
+ * Typographic characters folded to ASCII before matching.
+ *
+ * SIX OF THE FOURTEEN MARKERS CONTAIN AN APOSTROPHE, and models emit U+2019 routinely - it is what
+ * most of them produce for a contraction in prose. `I can't` matched and `I can't` did not, so a
+ * provider that changed nothing but its typography would move the `refusal` rate, and this project
+ * would report a font decision as drift. Nothing else in the pipeline normalises text, and it must
+ * not: the graders read the raw bytes and the recorded outputs are evidence. This fold is scoped to
+ * the lexicon match and touches nothing that is stored or scored elsewhere.
+ *
+ * NOT OBSERVED ON THE RECORDED RUNS. Across all 930 graded records there is not one U+2019 and not
+ * one marker of any kind fires, so this is a latent gap rather than a correction to a published
+ * number. It is fixed because the next collection is not obliged to look like the last one.
+ */
+const TYPOGRAPHIC: Readonly<Record<string, string>> = {
+  "\u2018": "'",
+  "\u2019": "'",
+  "\u02bc": "'",
+  "\u201c": '"',
+  "\u201d": '"',
+};
+
+const foldTypography = (text: string): string =>
+  text.replace(/[\u2018\u2019\u02bc\u201c\u201d]/g, (c) => TYPOGRAPHIC[c] ?? c);
 
 /**
  * How far into the text a marker may appear and still count as an opener.
@@ -78,7 +128,22 @@ export interface RefusalVerdict {
 }
 
 export function detectRefusal(text: string): RefusalVerdict {
-  const lowered = text.trim().toLowerCase();
+  const folded = foldTypography(text.trim().toLowerCase());
+
+  // Strip one leading preamble, then decide on what follows. `offset` keeps the reported index in
+  // the coordinates of the original text, because a report that explains itself has to point at
+  // the right place.
+  let lowered = folded;
+  let offset = 0;
+  for (const preamble of REFUSAL_PREAMBLES) {
+    if (!lowered.startsWith(preamble)) continue;
+    const rest = lowered.slice(preamble.length);
+    const trimmed = rest.replace(/^[\s,.:;-]+/, "");
+    offset = folded.length - trimmed.length;
+    lowered = trimmed;
+    break;
+  }
+
   let best: RefusalVerdict = { refused: false, marker: null, index: -1 };
   for (const marker of REFUSAL_MARKERS) {
     const at = lowered.indexOf(marker);
@@ -88,7 +153,9 @@ export function detectRefusal(text: string): RefusalVerdict {
     if (before !== undefined && before !== "" && /[a-z0-9]/.test(before)) continue;
     // And a sentence boundary in front, so a caveat inside an answer is not a refusal.
     if (at !== 0 && !SENTENCE_START.test(lowered.slice(0, at))) continue;
-    if (best.index === -1 || at < best.index) best = { refused: true, marker, index: at };
+    if (best.index === -1 || at < best.index) {
+      best = { refused: true, marker, index: at + offset };
+    }
   }
   return best;
 }

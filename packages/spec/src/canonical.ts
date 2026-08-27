@@ -97,6 +97,35 @@ function render(value: unknown, pad: string): string {
       break;
   }
 
+  // ONLY A PLAIN OBJECT OR AN ARRAY REACHES THE CODE BELOW, and this check is the whole reason to
+  // write it out rather than let `Object.entries` handle whatever arrives.
+  //
+  // THE HOLE THIS CLOSES was the exact failure the module header argues against, in the module that
+  // argues against it. `default: break` let every non-plain object fall through to `Object.entries`,
+  // which returns [] for a Date, a Map, a Set, a RegExp and a class instance - so each rendered as
+  // `{}`, and:
+  //
+  //     canonicalHash({ a: new Date(0) }) === canonicalHash({ a: new Date(999999) })   // true
+  //
+  // Two different objects hashing the same is the one thing this file exists to prevent. It threw
+  // loudly on undefined, NaN, Infinity and -0 and then flattened everything else in silence.
+  //
+  // A REFUSAL, NOT A COERCION, and deliberately not `toJSON()`. Honouring `toJSON` would let a Date
+  // serialize as an ISO string, which looks helpful and reopens the hole one level down: two
+  // objects that differ only in something `toJSON` discards would hash the same again. A caller who
+  // wants a Date in a digest has to say which representation of it they mean.
+  // A null-prototype object is allowed: it is a plain data bag, `Object.entries` enumerates it
+  // correctly, and it cannot collide with anything. Only prototypes that CARRY STATE `Object.entries`
+  // cannot see are the hazard.
+  const proto = Array.isArray(value) ? null : Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+    const name = (value as object).constructor?.name ?? "value";
+    throw new SentinelError(
+      "uncanonicalizable_value",
+      `a ${name} cannot be canonicalized: it is not a plain object, and Object.entries would render it as {} - so two different values would hash the same. Convert it to a plain JSON value first, choosing the representation you mean.`,
+    );
+  }
+
   const inner = pad + INDENT;
 
   if (Array.isArray(value)) {

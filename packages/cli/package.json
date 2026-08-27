@@ -1,6 +1,6 @@
 {
   "name": "@model-regression-sentinel/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The sentinel command line: freeze, run, baseline, compare, watch and report.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -37,7 +37,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE"],
+  "files": ["LICENSE", "README.md", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

@@ -110,19 +110,35 @@ In every one of those cases the tool has learned nothing about the provider, and
 only defensible output. Reading `INCONCLUSIVE` as a green tick is the single most expensive mistake
 this report can cause, which is why it is not rendered as one.
 
-## When `NO_DRIFT` is unreachable
+## When `NO_DRIFT` is unreachable, and what it took to reach it
 
 `NO_DRIFT` requires **every gating metric to have been genuinely checked**. A metric carried by too
 few cases can never reach significance, so it can never be checked, so the suite can never say
 `NO_DRIFT` however clean the data.
 
 **This was the state in v0.1.** `schemaValid` existed on two cases. Two cases give the sign-flip test
-four possible sign assignments and a smallest attainable p of 0.25, so no effect of any size could
+four sign assignments and, because the test is two-sided, a smallest attainable p of 2/4 = 0.5, so no effect of any size could
 resolve. All 200 A/A splits returned `INCONCLUSIVE` and not one returned `NO_DRIFT`.
 
-v0.2 adds a `schema` split to make it structurally reachable. Whether it is reachable **in practice**
-against a real provider is a question about the data, and `results/CALIBRATION.md` is where the
-answer lives rather than here.
+**TWO THINGS BLOCKED IT AND ONLY ONE WAS THE CORPUS.** v0.2 adds a `schema` split, taking
+`schemaValid` to 12 cases where the floor is 2/4096. That was necessary and not sufficient:
+`refusal` is also gating, and the power simulator searched a *drop* in it. On a healthy corpus the
+refusal rate is 0, so there was nothing to drop, the simulated power came back flat at every effect
+size, and its MDE resolved to `null` on **every** corpus. No amount of collecting would have fixed
+that one.
+
+**With both corrected, it was observed.** The 34-case collection returned `NO_DRIFT` on two
+independently collected arms:
+
+| gating metric | smallest uniform drop resolvable |
+|---|---|
+| `quality` | 10.0 pp |
+| `schemaValid` | 25.0 pp |
+| `refusal` | 8.0 pp |
+| `outputTokens` | 15.0% |
+
+The block below is measured on the **v0.1** corpus, where `NO_DRIFT` remains unreachable for the
+reason above. [results/CALIBRATION-V2.md](../results/CALIBRATION-V2.md) carries the v0.2 study.
 
 ## Measured error behaviour
 

@@ -100,13 +100,35 @@ export function readSnapshot(path: string): RunSnapshot {
     problems.push("replicates is missing or is not a number");
   }
 
+  // errorCount IS LOAD-BEARING AND WAS NOT CHECKED. `sentinel run` decides whether a collection was
+  // a look at the provider at all by comparing it against `records.length`, and `undefined === n` is
+  // simply false - so a snapshot missing the field described a run in which every call failed and
+  // was accepted as a good baseline, silently, by the one comparison that exists to catch that.
+  if (typeof record.errorCount !== "number" || !Number.isFinite(record.errorCount)) {
+    problems.push("errorCount is missing or is not a finite number");
+  } else if (Array.isArray(record.records) && record.errorCount > record.records.length) {
+    problems.push(
+      `errorCount is ${record.errorCount} against ${record.records.length} record(s), which cannot be true of any run`,
+    );
+  }
+
   if (problems.length > 0) {
     throw new SentinelError(
       "corpus_invalid",
       `${path} is not a usable snapshot:\n${problems.map((p) => `  ${p}`).join("\n")}`,
     );
   }
-  return body as unknown as RunSnapshot;
+
+  // NORMALISE THE PROVENANCE FIELD RATHER THAN TEACHING EVERY READER ABOUT BOTH SHAPES. Snapshots
+  // collected before `splits` existed - including the four paid-for arms in results/runs/ - carry a
+  // single `split` string. Reading is the one place that knows about the old shape, so it is the one
+  // place that should, and a reader downstream can treat `splits` as always present.
+  const normalised =
+    Array.isArray(record.splits) || typeof record.split !== "string"
+      ? body
+      : { ...record, splits: [record.split] };
+
+  return normalised as unknown as RunSnapshot;
 }
 
 /**
@@ -145,7 +167,9 @@ export function listSnapshots(dir: string): readonly SnapshotEntry[] {
       label: text(record.label),
       capturedAt: record.capturedAt,
       requestedModel: text(record.requestedModel),
-      split: text(record.split),
+      split: Array.isArray(record.splits)
+        ? record.splits.map((x) => text(x)).join("+")
+        : text(record.split),
       replicates: typeof record.replicates === "number" ? record.replicates : 0,
     });
   }

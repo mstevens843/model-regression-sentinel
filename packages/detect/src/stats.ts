@@ -74,6 +74,36 @@ export function wilsonHalfwidth(p: number, n: number, z = 1.96): number {
  */
 export const ruleOfThree = (n: number): number => (n <= 0 ? 1 : Math.min(1, 3 / n));
 
+/**
+ * The symmetric percent difference, bounded in [-2, 2].
+ *
+ * THE STATISTIC THAT REPLACED THE NAIVE RATIO, and it lives in stats.ts rather than in compare.ts
+ * because BOTH the detector and the power simulator have to use it and a cycle would form the other
+ * way round. That split is the whole reason a defect survived here: the fix landed in compare.ts,
+ * `mde.ts` kept computing `(c - b) / b`, and nothing connected the two files.
+ *
+ * WHY NOT THE NAIVE RATIO. Dividing by the baseline is unbounded, and this corpus contains a case
+ * that breaks it. `cnt-c-003` is bimodal - the model usually answers in one word and sometimes
+ * writes a paragraph - and runs 5 to 480 output tokens in the recorded baseline, a 96x spread. A
+ * resample whose denominator lands on the short mode produces a ratio in the thousands of percent,
+ * and one such case dominates a statistic that averages over cases. Measured on that case, at a
+ * true injected shift of +8 percent, over 3,000 resamples:
+ *
+ *     formula                       p50     p95     p99     max
+ *     naive     (c - b) / b       0.078   1.244   2.223   9.620
+ *     symmetric 2(c-b)/(c+b)      0.075   0.767   1.053   1.656
+ *
+ * The two agree to first order for the small changes that matter and diverge exactly where the
+ * naive form stops being a measurement. Bounded means no single bimodal case can swamp the suite.
+ *
+ * Zero when both sides are zero, which is the right answer rather than a guard: two arms that both
+ * produced nothing did not differ.
+ */
+export function symmetricRelative(candidate: number, baseline: number): number {
+  const total = candidate + baseline;
+  return total === 0 ? 0 : (2 * (candidate - baseline)) / total;
+}
+
 export const mean = (xs: readonly number[]): number =>
   xs.length === 0 ? Number.NaN : xs.reduce((a, b) => a + b, 0) / xs.length;
 

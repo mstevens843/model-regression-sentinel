@@ -59,7 +59,7 @@ main()
       process.exitCode = 2;
       return;
     }
-    // Everything else is 2 as well, and deliberately not 1. An unexpected failure means the tool
+    // Everything else is 2 as well, and deliberately not 1 (see exitCodes.ts for all four). An unexpected failure means the tool
     // could not do its job, which is a different claim from "the provider got worse", and a
     // pipeline that conflates the two will eventually treat a crash as a regression.
     process.stderr.write(

@@ -61,7 +61,12 @@
 // watch file. That is what makes a drift-over-time sequence replayable: a test can hand it sixty
 // synthetic rounds and assert the exact tick the status changed on.
 
-import { type EProcessState, extractMetrics, observeMany } from "@model-regression-sentinel/detect";
+import {
+  type EProcessState,
+  extractMetrics,
+  observeMany,
+  whyItCouldNotLook,
+} from "@model-regression-sentinel/detect";
 import type { FingerprintChange, RunSnapshot } from "@model-regression-sentinel/run";
 import {
   EXIT_CONFIRMED_REGRESSION,
@@ -110,7 +115,10 @@ export function tick(input: TickInput): TickResult {
   const { file, snapshot, cases } = input;
   const at = input.now.toISOString();
 
-  const blocked = whyItCouldNotLook(file, snapshot);
+  const blocked = whyItCouldNotLook(
+    { corpusDigest: file.corpusDigest, requestedModel: file.requestedModel },
+    snapshot,
+  );
   if (blocked !== null) {
     // Nothing is folded and no identity is adopted. A round that was not a look at this watch's
     // subject must leave the accumulated evidence untouched, including the evidence about identity.
@@ -210,11 +218,12 @@ export function tick(input: TickInput): TickResult {
  * `identity_changed` is a fact about a re-tag, not a regression, and re-tagging the same weights is
  * a thing vendors do; it is reported loudly and returns zero.
  *
- * BEING UNABLE TO LOOK IS A DISTINCT FAILURE FROM A REGRESSION, which is why it is 2 and not 1. The
- * two demand opposite responses: a 1 means investigate the provider's behaviour, a 2 means fix the
+ * BEING UNABLE TO LOOK IS A DISTINCT FAILURE FROM A REGRESSION, which is why it is 3 and not 1. The
+ * two demand opposite responses: a 1 means investigate the provider's behaviour, a 3 means fix the
  * watcher, its credentials or its corpus, and a caller that cannot tell them apart will do the first
  * thing in response to the second and find nothing. This mirrors `exitCodeFor`, where
- * NOT_COMPARABLE is 2 because the tool was misused rather than the provider having moved.
+ * NOT_COMPARABLE is 2 because the tool was MISUSED, and an arm that never reached the provider is 3
+ * because the invocation was fine and the world would not cooperate.
  */
 export function tickExitCode(result: TickResult): number {
   // v0.2 splits what v0.1 collapsed. `could_not_look` used to return 2 alongside every other
@@ -227,29 +236,10 @@ export function tickExitCode(result: TickResult): number {
   return EXIT_OK;
 }
 
-/**
- * Whether this round was a look at this watch's subject at all.
- *
- * Returns a sentence rather than a boolean, because "could not look" is not actionable and "the key
- * was absent on all 40 calls" is.
- */
-function whyItCouldNotLook(file: WatchFile, snapshot: RunSnapshot): string | null {
-  if (snapshot.corpusDigest !== file.corpusDigest) {
-    return `this round was collected against corpus digest ${snapshot.corpusDigest} and the watch has been accumulating evidence against ${file.corpusDigest}, so it is a look at a different question rather than a look at this one.`;
-  }
-  if (snapshot.requestedModel !== file.requestedModel) {
-    return `this round requested "${snapshot.requestedModel}" and the watch is pinned to "${file.requestedModel}", so it is a look at a different subject.`;
-  }
-  if (snapshot.records.length === 0) {
-    return "this round recorded no calls at all.";
-  }
-  const failed = snapshot.records.filter((r) => r.response.error !== "");
-  if (failed.length === snapshot.records.length) {
-    const first = failed[0];
-    return `all ${failed.length} call(s) in this round failed${first === undefined ? "" : `, the first with: ${first.response.error}`}.`;
-  }
-  return null;
-}
+// `whyItCouldNotLook` now lives in @model-regression-sentinel/detect, because `compare` needed the
+// same question answered and answered identically. Two copies of "was this a look?" is how the two
+// answers drift apart, and the version that drifts is always the one with fewer callers. See
+// packages/detect/src/observed.ts for the argument.
 
 /**
  * This round's pass/fail stream, per case.

@@ -94,9 +94,16 @@ describe("the calibration suite discriminates", () => {
   it("keeps the surgical mutants surgical", () => {
     // The number to watch across releases. Adding scenarios is the easy way to make an existing
     // mutant fail more broadly, and a mutant whose blast radius quietly widens means the new
-    // scenarios are blunt rather than sharp. These four are each caught by exactly one scenario
-    // today, and that is the property worth defending.
-    for (const id of ["peeks", "noConfirmation", "anyCorpus", "singleReplicateOk"]) {
+    // scenarios are blunt rather than sharp.
+    //
+    // `singleReplicateOk` LEFT THIS SET WHEN SCENARIO 13 ARRIVED, and it was checked rather than
+    // waved through - which is the whole point of the guard firing. It is not that 13 is blunt: it
+    // asserts one thing, that an arm which never reached the provider is not a report that nothing
+    // moved. `singleReplicateOk` overwrites any INCONCLUSIVE with NO_DRIFT, and could-not-look is
+    // one of the two things INCONCLUSIVE means, so the mutant commits that error too. Two mistakes
+    // that read as unrelated turn out to be one deletion. `outageIsQuiet` is the surgical control
+    // for 13 and is in the list below.
+    for (const id of ["peeks", "noConfirmation", "anyCorpus", "outageIsQuiet"]) {
       const mutant = ALL_MUTANTS.find((m) => m.id === id);
       expect(mutant, `${id} is no longer in the mutant list`).toBeDefined();
       const report = runCalibration((mutant as DetectorMutant).detector);

@@ -127,12 +127,22 @@ function runGrader(
         return { grader: "jsonSchema", passed: false, detail: "the output is not JSON" };
       }
       const result = validateAgainstSchema(parsed, schema);
+      // `unsupportedKeywords` EXISTS SO A CASE CANNOT QUIETLY RELY ON A KEYWORD THIS DOES NOT
+      // IMPLEMENT, and it was computed and then discarded by every caller in the repository. A case
+      // using `oneOf`, `allOf`, `$ref`, `const`, `multipleOf`, `uniqueItems` or `format` therefore
+      // validated more loosely than its author wrote it, reported `schemaValid: true`, and said so
+      // nowhere - on a metric that can fail a build. Surfacing it in `detail` is the minimum: the
+      // number is still a pass, and now the pass says what it did not check.
+      const caveat =
+        result.unsupportedKeywords.length === 0
+          ? ""
+          : ` (NOT CHECKED: ${result.unsupportedKeywords.join(", ")} - this validator implements a documented subset, so this case is validated more loosely than it is written)`;
       return {
         grader: "jsonSchema",
         passed: result.valid,
         detail: result.valid
-          ? "valid"
-          : result.errors.map((e) => `${e.path || "<root>"}: ${e.message}`).join("; "),
+          ? `valid${caveat}`
+          : `${result.errors.map((e) => `${e.path || "<root>"}: ${e.message}`).join("; ")}${caveat}`,
       };
     }
     case "numericTolerance": {

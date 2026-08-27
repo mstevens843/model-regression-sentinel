@@ -52,6 +52,15 @@ jobs:
       - name: Verify the extended split matches MANIFEST.sha256
         run: shasum -a 256 -c corpus/extended/MANIFEST.sha256
 
+      # The 10 schema cases, added in v0.2. Written out as a third step for the reason the comment
+      # above gives - and the fact that it was NOT here until now is the argument for that comment
+      # rather than against it: the split was added, the glob-free list was not updated, and a third
+      # of the corpus sat outside the only gate that runs before anything else. `write-manifest.mjs
+      # --check` in build-test did cover it, but only after an install and a build, and a red X there
+      # says "something in CI broke" rather than "the corpus drifted".
+      - name: Verify the schema split matches MANIFEST.sha256
+        run: shasum -a 256 -c corpus/schema/MANIFEST.sha256
+
       # A failed hash check prints a list of filenames and nothing about what to do next, and the
       # tempting next move is exactly the wrong one. Without this step the first person to hit a
       # drift would regenerate the manifest, and the check would go green having proved nothing.
@@ -130,6 +139,19 @@ jobs:
       # will not re-count. --check regenerates the table and exits 1 if it would differ.
       - name: The case-composition table must match the corpus
         run: node scripts/case-composition.mjs --check
+
+      # THE ANTI-STALENESS MACHINE, ACTUALLY PLUGGED IN. `generated-blocks.mjs --check` regenerates
+      # every GENERATED block and exits 1 if any would differ. It has existed since v0.1 and its own
+      # header claimed it was "wired into CI and into pnpm audit:release"; it was wired into neither,
+      # and ran only transitively inside `pnpm test`, where a stale-docs failure surfaces as a
+      # spec-package test failure that nobody reads as "the README is wrong".
+      #
+      # That omission is why this repository's README claimed 267 tests against 547, 9 mutants
+      # against 11, and 11 scenarios against 13 - every one of them a number the machine could have
+      # regenerated. Without this step a green run proves the code compiles and says nothing about
+      # whether the numbers the README quotes are the numbers the artifacts contain.
+      - name: Every generated block must match the artifact it describes
+        run: node scripts/generated-blocks.mjs --check
 
       # THE NEGATIVE CONTROL. A check that only ever passes proves nothing: corpus-integrity has
       # been green on every run of this pipeline, and that is equally consistent with the corpus

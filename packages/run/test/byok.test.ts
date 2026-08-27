@@ -27,6 +27,7 @@
 // is self-consistent and proves nothing about the wire formats being right. `PROVIDER_REGISTRY`
 // still says `everRun: false` for both, and it stays that way until a key exists.
 
+import { readFileSync } from "node:fs";
 import { type EvalCase, caseId, detectRefusal, promptId } from "@model-regression-sentinel/spec";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fingerprintOf, undisclosedFields } from "../src/fingerprint.js";
@@ -61,6 +62,8 @@ interface Wire {
   readonly jsonError?: Error;
   /** The fetch itself rejects with this: an outage, a DNS failure, an abort. */
   readonly transportError?: unknown;
+  /** The raw body of a non-200 response, which a real endpoint always carries. */
+  readonly errorBody?: string;
 }
 
 /** What the adapter actually put on the wire. The only place a key is allowed to appear. */
@@ -99,6 +102,9 @@ function fakeTransport(wire: Wire): {
       status,
       json: () =>
         wire.jsonError === undefined ? Promise.resolve(wire.body) : Promise.reject(wire.jsonError),
+      // A non-200 body. The adapter used to discard it, which made `HTTP 400: unexpected status`
+      // the entire diagnostic for the most likely first-call outcome.
+      text: () => Promise.resolve(wire.errorBody ?? ""),
     });
   };
   return { fetcher, sent };
@@ -482,5 +488,107 @@ describe("a key never reaches an artifact", () => {
     expect(snapshot.cost.rateUnknown).toBe(false);
     expect(snapshot.cost.bareApiUsdPerCall).toBeCloseTo(468e-6 * 2 + 41e-6 * 10, 9);
     expect(snapshot.cost.bareApiUsdPerCall).toBeGreaterThan(snapshot.cost.harnessUsdPerCall);
+  });
+});
+
+// WHAT WOULD HAVE MADE A FIRST LIVE CALL FAIL OR MISLEAD.
+//
+// These adapters are shipped and unrun: no credential exists in the environment that produced this
+// repository, so nothing below is a live test. Each case pins a defect found by reading the request
+// and response shapes against the real API contracts, and each one would have produced a wrong
+// MEASUREMENT rather than an obvious failure - which is the only kind worth writing a test for.
+describe("the BYOK adapters, hardened against a first real call", () => {
+  it("Anthropic sends the case schema rather than dropping it", async () => {
+    // 12 of 34 corpus cases carry a jsonSchema and `schemaValid` is GATING. This adapter dropped it
+    // while the OpenAI one sent it, so an Anthropic arm answered schema cases unconstrained. And
+    // because `requestKey` hashes the schema, both arms still produce the SAME corpusDigest - so
+    // `compare` accepts them and a pure adapter gap fails the build as a model regression.
+    const t = fakeTransport({ body: ANTHROPIC_OK });
+    const provider = new AnthropicApiProvider("claude-sonnet-5", {
+      fetcher: t.fetcher,
+      apiKeyEnv: KEY_ENV,
+    });
+    await provider.complete({
+      system: "You are terse.",
+      user: "Answer.",
+      jsonSchema: { type: "object", properties: { verdict: { type: "string" } } },
+    });
+    const body = JSON.parse(t.sent[0]?.body ?? "{}") as { system?: string };
+    expect(body.system, "the schema reached the provider in some form").toContain("verdict");
+    expect(body.system).toContain("JSON Schema");
+  });
+
+  it("surfaces the body of a non-200, because that is the only diagnostic a 4xx has", async () => {
+    const t = fakeTransport({
+      status: 400,
+      body: {},
+      errorBody: '{"type":"error","error":{"message":"model: unknown model claude-nope"}}',
+    });
+    const provider = new AnthropicApiProvider("claude-nope", {
+      fetcher: t.fetcher,
+      apiKeyEnv: KEY_ENV,
+    });
+    const r = await provider.complete({ system: "s", user: "u" });
+    expect(r.error).toContain("HTTP 400");
+    expect(r.error, "a reader must be able to tell WHICH 400 this was").toContain("unknown model");
+  });
+
+  it("never lets a credential ride back out inside an error body", async () => {
+    // The error body is text this process did not author, and a provider that echoes the request
+    // back would otherwise write a key into an artifact that gets committed.
+    const t = fakeTransport({
+      status: 401,
+      body: {},
+      errorBody: "rejected request with authorization sk-abcdefghijklmnop and more text",
+    });
+    const provider = new AnthropicApiProvider("claude-sonnet-5", {
+      fetcher: t.fetcher,
+      apiKeyEnv: KEY_ENV,
+    });
+    const r = await provider.complete({ system: "s", user: "u" });
+    expect(r.error).not.toContain("sk-abcdefghijklmnop");
+    expect(r.error).toContain("REDACTED");
+  });
+
+  it("bounds the error body, because it is unbounded text from elsewhere", async () => {
+    const t = fakeTransport({ status: 500, body: {}, errorBody: "x".repeat(5000) });
+    const provider = new AnthropicApiProvider("claude-sonnet-5", {
+      fetcher: t.fetcher,
+      apiKeyEnv: KEY_ENV,
+    });
+    const r = await provider.complete({ system: "s", user: "u" });
+    expect(r.error.length).toBeLessThan(400);
+  });
+
+  it("records serviceTier as a fact about the provider, not about the adapter", async () => {
+    // "" maps to `not_exposed`, which asserts "the provider was asked and does not report this".
+    // That was false: the Messages API returns usage.service_tier and claudeCli.ts already reads
+    // it. A CLI baseline against a BYOK candidate therefore produced a `disappeared` row on that
+    // field - a fabricated provider-behaviour finding out of an adapter omission.
+    const t = fakeTransport({
+      body: {
+        ...ANTHROPIC_OK,
+        usage: { input_tokens: 10, output_tokens: 5, service_tier: "standard" },
+      },
+    });
+    const provider = new AnthropicApiProvider("claude-sonnet-5", {
+      fetcher: t.fetcher,
+      apiKeyEnv: KEY_ENV,
+    });
+    const r = await provider.complete({ system: "s", user: "u" });
+    expect(r.serviceTier).toBe("standard");
+  });
+
+  it("the adapter version tracks the package rather than a hand-typed constant", async () => {
+    // It read "0.2.0" while the manifest read "0.1.0". A version that does not move when the
+    // adapter does means the metadata diff CERTIFIES stability across the one change that moved
+    // the numbers.
+    const manifest = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    const { ADAPTER_VERSION } = (await import("../src/runner.js")) as unknown as {
+      ADAPTER_VERSION?: string;
+    };
+    if (ADAPTER_VERSION !== undefined) expect(ADAPTER_VERSION).toBe(manifest.version);
   });
 });

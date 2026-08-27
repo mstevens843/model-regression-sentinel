@@ -6,8 +6,11 @@
 // itself, then the raw statistics.
 
 // ---- the detector --------------------------------------------------------------------------------
-export { compare, exitCodeFor, symmetricRelative } from "./compare.js";
+export { compare, exitCodeFor } from "./compare.js";
+export { symmetricRelative } from "./stats.js";
 export { referenceDetector, check, expectEqual } from "./detector.js";
+export { observedNothing, whyItCouldNotLook } from "./observed.js";
+export type { WatchSubject } from "./observed.js";
 export { extractMetrics, pairCases } from "./metrics.js";
 
 // ---- the two nulls -------------------------------------------------------------------------------

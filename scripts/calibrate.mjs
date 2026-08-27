@@ -40,10 +40,12 @@ const arg = (n, d) => {
 let spec;
 let detect;
 let baselinePkg;
+let run;
 try {
   spec = await import(join(ROOT, "packages/spec/dist/index.js"));
   detect = await import(join(ROOT, "packages/detect/dist/index.js"));
   baselinePkg = await import(join(ROOT, "packages/baseline/dist/index.js"));
+  run = await import(join(ROOT, "packages/run/dist/index.js"));
 } catch (cause) {
   console.error(
     `this script reads the built packages. Run \`pnpm build\` first.\n${String(cause)}`,
@@ -54,7 +56,16 @@ try {
 const SPLITS = Number(arg("splits", "200"));
 const TRIALS = Number(arg("trials", "40"));
 const OUT = join(ROOT, arg("out", "results"));
-const RUNS = join(ROOT, "results", "runs");
+// `--runs <dir>` so a second study can be run against a second collection. It was hardcoded, and an
+// unknown flag is accepted silently by this script's argv parsing - so `--runs results/runs-v2`
+// re-ran the v0.1 study and reported v0.1 numbers under a v0.2 heading, which is worse than
+// erroring. The corpus is then chosen by matching the digest these runs record, so pointing this at
+// a different collection cannot silently calibrate against the wrong cases.
+const RUNS = join(ROOT, arg("runs", join("results", "runs")));
+// A study of a different collection must not overwrite the first one's record.
+const SUFFIX = RUNS.endsWith("runs")
+  ? ""
+  : `-${(RUNS.split("/").pop() ?? "").replace(/^runs-/, "")}`;
 
 // THE v0.1 PAIR, DELIBERATELY, AND NOT `loadCorpus`. The four runs under results/runs/ were
 // collected against canary plus extended and carry a corpusDigest over exactly those 24 rendered
@@ -62,9 +73,44 @@ const RUNS = join(ROOT, "results", "runs");
 // would compare recorded outputs to cases that were never called: every A/A split would come back
 // NOT_COMPARABLE and the false-positive rate would be measured over nothing. The digest is pinned in
 // packages/run/test/corpusV1Digest.test.ts.
-const cases = spec.loadV1Corpus(join(ROOT, "corpus"));
 const baseline = baselinePkg.readSnapshot(join(RUNS, "baseline.json"));
 const candidate = baselinePkg.readSnapshot(join(RUNS, "candidate.json"));
+
+// THE CORPUS IS CHOSEN BY MATCHING THE DIGEST THE RUNS RECORD, not by a hardcoded loader.
+//
+// This was pinned to `loadV1Corpus`, which was right for the runs in `results/runs/` and silently
+// wrong for any other set. Point it at runs collected over all three splits and every A/A split
+// comes back NOT_COMPARABLE - and `fpr` divides `drift` by the FULL split count regardless, so the
+// script would have published "**0 of 200** = 0.0% against a nominal 5.0%" measured over zero
+// comparable comparisons, into a README block, in a document whose header says every number was
+// produced by running the command shown.
+const CANDIDATE_CORPORA = [
+  ["v1 (canary + extended)", spec.loadV1Corpus(join(ROOT, "corpus"))],
+  ["all splits", spec.loadCorpus(join(ROOT, "corpus"))],
+];
+const matched = CANDIDATE_CORPORA.find(
+  ([, list]) => run.corpusDigestOf(list) === baseline.corpusDigest,
+);
+if (matched === undefined) {
+  console.error(`the runs in ${RUNS} carry corpusDigest ${baseline.corpusDigest},`);
+  console.error(
+    "which matches no corpus this repository can load. Calibrating against a corpus the",
+  );
+  console.error(
+    "runs were not collected on measures nothing, so this refuses rather than reporting",
+  );
+  console.error("a false-positive rate over zero comparable splits.");
+  process.exit(2);
+}
+const [corpusName, cases] = matched;
+console.log(`corpus: ${corpusName}, ${cases.length} cases (matched by digest)`);
+
+// COUNTED, NOT TYPED. The sentence this feeds used to be a hardcoded "only two cases" with a
+// hardcoded p-floor beside it, and `ci.yml` cites that exact sentence as its worked example of a
+// claim that goes wrong silently. It also cited a p-floor of 0.25, which is the ONE-SIDED value: the
+// sign-flip test is two-sided, the observed assignment and its mirror are both always at least as
+// extreme, and the floor is 2/2^k rather than 1/2^k. At k=2 that is 0.5, not 0.25.
+const schemaCaseCount = cases.filter((c) => c.input.jsonSchema !== undefined).length;
 
 const FAST = { skipMde: true, calibrationSplits: 200 };
 const drifted = (v) => v === "SUSPECTED_DRIFT" || v === "CONFIRMED_DRIFT";
@@ -199,7 +245,7 @@ const payload = {
   },
   baselineMeanPassRate: baseRate,
 };
-writeFileSync(join(OUT, "calibration.json"), spec.canonicalJson(payload));
+writeFileSync(join(OUT, `calibration${SUFFIX}.json`), spec.canonicalJson(payload));
 
 // The markdown is GENERATED, never typed. A hand-maintained number is a claim that was true once,
 // and the one that goes stale is always the one somebody quotes.
@@ -233,12 +279,24 @@ Verdict breakdown: ${Object.entries(aa.verdicts)
 
 ${
   aa.noDrift === 0 && aa.inconclusive > 0
-    ? `**Not one split returned NO_DRIFT, and that is a finding about this corpus rather than about
-the provider.** A NO_DRIFT verdict requires every gating metric to have been genuinely checked, and
-\`schemaValid\` exists on only two cases here. Two cases give the sign-flip test four possible sign
-assignments and a smallest attainable p of 0.25, so no effect of any size can reach significance on
-it. The suite therefore cannot reach NO_DRIFT at all until more schema cases exist, and it answers
-INCONCLUSIVE instead. That is the honest answer and an inconvenient one.`
+    ? `**Not one split returned NO_DRIFT, and that is a finding about this INSTRUMENT rather than
+about the provider.** A NO_DRIFT verdict requires every gating metric to have been genuinely
+checked, and
+\`schemaValid\` sits on ${schemaCaseCount} case(s) in the runs this study read. At k=${schemaCaseCount} the sign-flip
+test has 2^${schemaCaseCount} = ${2 ** schemaCaseCount} sign assignments, and it is TWO-SIDED - the observed assignment and its
+mirror are both always at least as extreme - so the smallest attainable p is 2/${2 ** schemaCaseCount} = ${(2 / 2 ** schemaCaseCount).toFixed(4)}.${
+        2 / 2 ** schemaCaseCount > 0.05
+          ? ` That is ABOVE alpha, so no effect of any size can reach significance on it, and the suite
+cannot reach NO_DRIFT at all on this corpus. Honest, and inconvenient.`
+          : ` That is BELOW alpha, so the metric can resolve and the corpus is not what stopped these
+splits.
+
+**THE SPLITS THEMSELVES ARE WHAT STOPPED THEM.** Each A/A half carries HALF the replicates the real
+comparison uses. That is what makes this null conservative, and it is also what costs it the power
+to resolve every gating metric at once. A comparison of the two FULL arms is a different and
+better-powered experiment, and it is reported immediately below - so read the next paragraph rather
+than concluding from this one that the verdict is out of reach.`
+      }`
     : ""
 }
 
@@ -274,21 +332,33 @@ If they disagreed, the MDE reporting would be wrong and this section would say s
 | rule of three at n=${payload.replicates} | an all-passing case still permits a ${pct(payload.mde.allPassCeiling)} failure rate |
 | replicates needed for a 5 point effect | ${payload.mde.replicatesForFivePoints ?? "more than 200"} |
 
-The prediction is the more conservative of the two, which is the right direction for it to be wrong
-in: the tool tells a user it can see less than it turns out to be able to see.
+${
+  payload.mde.predicted === null || payload.mde.measuredAt80 === null
+    ? "One of the two was not reached on the grid, so no direction can be stated."
+    : payload.mde.predicted >= payload.mde.measuredAt80
+      ? `The prediction (${pts(payload.mde.predicted)}) is the more CONSERVATIVE of the two, which is the right
+direction for it to be wrong in: the tool tells a user it can see less than it turns out to be able
+to see.`
+      : `**The prediction (${pts(payload.mde.predicted)}) is the more OPTIMISTIC of the two, which is the wrong
+direction.** The tool is telling a user it can resolve a smaller effect than it measurably can, and
+a reported MDE that overstates sensitivity is how a null result gets read as evidence of no change.
+This needs investigating before any verdict from this build is trusted.`
+}
 
 ## What this does NOT establish
 
 - **That the tool detects real provider drift.** No drift event has been observed. The power curve
-  is measured against an injected effect that moves the pass rate cleanly and moves nothing else,
-  which is the quantity the MDE predicts and is not what a real model update looks like.
+  is measured against an injected effect that moves the pass rate cleanly, which is the quantity the
+  MDE predicts and is not what a real model update looks like. "Moves nothing else" is not quite
+  true and the overstatement is worth naming: the injection replaces the recorded output text, so
+  \`schemaValid\` and \`refusal\` move with it. Only \`outputTokens\` is genuinely untouched.
 - **That the false positive rate holds over time.** Both A/A arms were collected minutes apart. A
   baseline compared against a candidate collected six weeks later meets a different network, a
   different load and possibly a different region, and none of that is in this measurement.
 - **That ${payload.cases} cases at ${payload.replicates} replicates is enough for anyone's purpose.** It resolves a
   ${payload.mde.predicted === null ? "" : pts(payload.mde.predicted)} drop. Whether that is useful depends on what a smaller drop would cost you.
 `;
-writeFileSync(join(OUT, "CALIBRATION.md"), md);
+writeFileSync(join(OUT, `CALIBRATION${SUFFIX === "" ? "" : SUFFIX.toUpperCase()}.md`), md);
 console.log(
-  `\nwritten to ${join(OUT, "calibration.json").slice(ROOT.length + 1)} and CALIBRATION.md`,
+  `\nwritten to ${join(OUT, `calibration${SUFFIX}.json`).slice(ROOT.length + 1)} and CALIBRATION${SUFFIX === "" ? "" : SUFFIX.toUpperCase()}.md`,
 );

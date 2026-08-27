@@ -101,6 +101,18 @@ export const skipped = (reason: string): ProviderResponse => ({
   error: `SKIPPED: ${reason}`,
 });
 
+/**
+ * A call that threw, recorded as a failed call rather than allowed to abort the run.
+ *
+ * Distinct from `skipped`, which means the provider declined to try - no credential, no adapter.
+ * This means it tried and the attempt raised. Both land in `error`, which is the single channel
+ * `extractMetrics` reads to drop a record from every sample and count it separately.
+ */
+export const threw = (detail: string): ProviderResponse => ({
+  ...skipped(""),
+  error: `THREW: ${detail}`,
+});
+
 /** Whether a provider can run, and if not, why. A reason a person can act on. */
 export interface Availability {
   readonly ok: boolean;

@@ -62,3 +62,34 @@ describe("canonicalJson", () => {
     expect(good.ok).toBe(true);
   });
 });
+
+// THE HOLE THIS MODULE ARGUED AGAINST, IN THIS MODULE.
+//
+// The header says an undefined property must throw because `{a:1}` and `{a:1,b:undefined}` would
+// otherwise produce the same string and no digest could tell them apart. It threw loudly on
+// undefined, NaN, Infinity and -0 - and then let every non-plain object fall through to
+// `Object.entries`, which returns [] for a Date, a Map, a Set and a class instance. Each rendered
+// as `{}`, so two different values hashed the same, silently, which is the one outcome the module
+// exists to prevent.
+describe("a value that Object.entries cannot see is refused, not flattened", () => {
+  it("refuses the prototypes that carry state", () => {
+    for (const value of [new Date(0), new Map([[1, 2]]), new Set([1]), /x/, new (class Foo {})()]) {
+      expect(() => canonicalJson({ a: value } as never)).toThrow(/cannot be canonicalized/);
+    }
+  });
+
+  it("no longer lets two different values hash the same", () => {
+    // The assertion that would have caught it. Both of these rendered as {} before.
+    expect(() => canonicalHash({ a: new Date(0) } as never)).toThrow();
+    expect(() => canonicalHash({ a: new Date(999_999) } as never)).toThrow();
+  });
+
+  it("still accepts every shape JSON.parse can produce", () => {
+    const nullProto = Object.create(null) as { a: number };
+    nullProto.a = 1;
+    // A null-prototype bag is plain data: Object.entries enumerates it correctly and it cannot
+    // collide with anything, so refusing it would be strictness without a reason.
+    expect(canonicalJson({ x: nullProto } as never)).toContain('"a": 1');
+    expect(canonicalJson({ a: [1, { b: "two" }], c: null })).toContain('"b": "two"');
+  });
+});

@@ -77,6 +77,77 @@ git tag -s corpus-canary-v1 <sha>
 satisfy it.** A freeze check that can be talked into agreeing is worth less than no freeze check,
 because it looks like evidence.
 
+## The weaker proof that IS cashable here, and why it has a different name
+
+`pnpm verify:precedence` checks a claim the strict freeze does not, and it must never be quoted as
+though it were the strict one.
+
+| | `verify:freeze` | `verify:precedence` |
+|---|---|---|
+| the claim | the corpus existed at a commit where **the detector did not** | each split was committed **no later than every recorded run measured against it** |
+| what it rules out | a corpus written to fit the detector | a corpus adjusted after seeing what it measured |
+| state here | **permanently unavailable** | cashable, and partly cashed |
+| exits | 1, by design, forever | 0 |
+
+**Why the strict one is permanent rather than pending.** It requires a commit at which
+`packages/detect/src/compare.ts` is absent. That file is present in this repository's first commit,
+so no commit that exists or will ever exist can satisfy it. "Not yet" would be false. The recipe
+above applies to the next repository, not to this one.
+
+**Why the weaker one is still worth having.** The load-bearing half of a freeze claim is not really
+"the corpus predates the detector" - it is "the corpus was not tuned to flatter a result". Those come
+apart: a corpus written after the detector, but committed before anything was measured against it,
+cannot have been adjusted to fit a measurement that did not exist yet. That is checkable, and it is
+checkable for every split added from here on.
+
+### What it reports, and what each word means
+
+- **PASS** - the split's cases were committed strictly before every run measured against them.
+- **WEAK PASS** - the cases and the runs are in the SAME commit. `git merge-base --is-ancestor X X`
+  is true, so this satisfies "not after" without establishing "before". Reported separately because
+  those are materially different sentences and only one of them is being claimed.
+- **PENDING** - a run exists on disk and is not committed, so it has no position in history yet.
+  This is the ordinary state of a working tree straight after a collection. It does not fail.
+- **VACUOUS** - no recorded run references this split at all, so there is no precedence to
+  establish. Not a pass.
+
+### The state at this freeze, and what commit changes
+
+At the time of writing, `results/runs-v2/` is collected and uncommitted:
+
+```
+canary:    4 run(s) ordered (0 strictly before), 4 pending
+extended:  4 run(s) ordered (0 strictly before), 4 pending
+schema:    4 run(s) pending, none yet ordered
+```
+
+The four ordered runs are the v0.1 collection, which shares a commit with the corpus it measures -
+hence WEAK, and hence zero strictly before. **Committing `results/runs-v2/` changes `schema` from
+PENDING to a real PASS**: the schema cases were committed at `072fcc8` and the v0.2 runs will be
+committed after it, which is a strict ancestor rather than the same commit. It is the first split in
+this repository that can hold the strong form of this weaker claim, and it can do so precisely
+because the split and the collection happened at different times.
+
+### After committing: the one command, and what to paste back
+
+This block is written BEFORE the commit, so it predicts rather than reports. Close the loop:
+
+```sh
+pnpm verify:precedence          # expect schema to leave PENDING
+pnpm blocks:check               # nothing above is generated, but the neighbours are
+pnpm audit:release              # the release gate, end to end
+```
+
+**The prediction to check.** `schema` should read `PASS - committed at 072fcc8..., strictly before
+every run that measured it.` If it instead reads `WEAK PASS`, the corpus and the runs landed in the
+SAME commit, which happens if `corpus/schema/` were somehow re-added alongside the runs - worth
+knowing, and a materially weaker sentence. If it reads `FAIL`, the runs were committed on a branch
+that does not descend from the one carrying the split, and that is the condition this check exists
+to catch.
+
+Replace the block above with the actual output once it is real. A prediction left in place after
+the fact reads as a measurement, which is the failure this whole document is about.
+
 ## What is frozen, and what is not
 
 | path | frozen | why |
