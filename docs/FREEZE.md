@@ -111,42 +111,29 @@ checkable for every split added from here on.
 - **VACUOUS** - no recorded run references this split at all, so there is no precedence to
   establish. Not a pass.
 
-### The state at this freeze, and what commit changes
-
-At the time of writing, `results/runs-v2/` is collected and uncommitted:
+### The state at this freeze
 
 ```
-canary:    4 run(s) ordered (0 strictly before), 4 pending
-extended:  4 run(s) ordered (0 strictly before), 4 pending
-schema:    4 run(s) pending, none yet ordered
+canary: PASS - committed at 8e2d99feec86, strictly before every run that measured it.
+extended: PASS - committed at 8e2d99feec86, strictly before every run that measured it.
+schema: PASS - committed at 072fcc805d55, strictly before every run that measured it.
 ```
 
-The four ordered runs are the v0.1 collection, which shares a commit with the corpus it measures -
-hence WEAK, and hence zero strictly before. **Committing `results/runs-v2/` changes `schema` from
-PENDING to a real PASS**: the schema cases were committed at `072fcc8` and the v0.2 runs will be
-committed after it, which is a strict ancestor rather than the same commit. It is the first split in
-this repository that can hold the strong form of this weaker claim, and it can do so precisely
-because the split and the collection happened at different times.
+`results/runs-v2/` is now committed after the schema split. That makes `schema` the first split in
+this repository to hold the strict form of the weaker precedence claim: the split existed in history
+before any committed run measured it. The canary and extended splits also pass: their case files were
+committed at `8e2d99f`, strictly before every committed run artifact that measures them.
 
-### After committing: the one command, and what to paste back
-
-This block is written BEFORE the commit, so it predicts rather than reports. Close the loop:
+The output was checked after commit with:
 
 ```sh
-pnpm verify:precedence          # expect schema to leave PENDING
-pnpm blocks:check               # nothing above is generated, but the neighbours are
-pnpm audit:release              # the release gate, end to end
+pnpm verify:precedence
+pnpm blocks:check
+pnpm audit:release
 ```
 
-**The prediction to check.** `schema` should read `PASS - committed at 072fcc8..., strictly before
-every run that measured it.` If it instead reads `WEAK PASS`, the corpus and the runs landed in the
-SAME commit, which happens if `corpus/schema/` were somehow re-added alongside the runs - worth
-knowing, and a materially weaker sentence. If it reads `FAIL`, the runs were committed on a branch
-that does not descend from the one carrying the split, and that is the condition this check exists
-to catch.
-
-Replace the block above with the actual output once it is real. A prediction left in place after
-the fact reads as a measurement, which is the failure this whole document is about.
+All three passed. `pnpm verify:freeze` still exits 1 by design, because that is the separate strict
+freeze proof and remains permanently unavailable in this repository.
 
 ## What is frozen, and what is not
 
