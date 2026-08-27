@@ -7,6 +7,7 @@
 export {
   AnthropicApiProvider,
   ClaudeCliProvider,
+  CodexCliProvider,
   NoopProvider,
   OpenAiCompatibleProvider,
   PROVIDER_REGISTRY,

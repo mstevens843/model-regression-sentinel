@@ -3,47 +3,47 @@
   "packages": [
     {
       "package": "cli",
-      "files": 40,
+      "files": 6,
       "tests": 163,
       "passed": 163
     },
     {
       "package": "spec",
-      "files": 28,
-      "tests": 115,
-      "passed": 115
+      "files": 8,
+      "tests": 118,
+      "passed": 118
+    },
+    {
+      "package": "run",
+      "files": 6,
+      "tests": 95,
+      "passed": 95
     },
     {
       "package": "detect",
-      "files": 15,
+      "files": 4,
       "tests": 77,
       "passed": 77
     },
     {
-      "package": "run",
-      "files": 23,
-      "tests": 75,
-      "passed": 75
-    },
-    {
       "package": "report",
-      "files": 15,
+      "files": 2,
       "tests": 57,
       "passed": 57
     },
     {
       "package": "watch",
-      "files": 19,
+      "files": 3,
       "tests": 56,
       "passed": 56
     },
     {
       "package": "baseline",
-      "files": 12,
+      "files": 3,
       "tests": 36,
       "passed": 36
     }
   ],
-  "totalTests": 579,
-  "totalFiles": 152
+  "totalTests": 602,
+  "totalFiles": 32
 }

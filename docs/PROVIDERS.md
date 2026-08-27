@@ -1,14 +1,17 @@
 # Providers: what was run, what was not, and what each one costs you
 
-Five adapters behind one seam. The column that matters is the third one.
+<!-- GENERATED:provider-table -->
+**6 adapters behind one seam, 4 of them ever run here.** The column that matters is the third one.
 
 | adapter | credential | ever run here | notes |
 |---|---|---|---|
-| `claude_cli` | an authenticated local `claude` CLI | **yes** | Every measured number in this repository came from it. |
-| `anthropic_api` | `ANTHROPIC_API_KEY` | **no** | Shipped and unrun. Its cost would be the deployed cost, with no harness overhead to subtract. |
-| `openai_compatible` | `OPENAI_API_KEY` plus `OPENAI_BASE_URL` | **no** | Shipped and unrun. Speaks `/v1/chat/completions`, so it also reaches vLLM, Together, OpenRouter and Ollama. |
-| `replay` | none | yes | Replays recorded outputs keyed by request hash. What the tests and both calibration studies use. |
-| `noop` | none | yes | Returns `SKIPPED: <reason>` for every call, so an absent measurement is visible rather than missing. |
+| `claude_cli` | an authenticated local `claude` CLI | **yes** | Every number in results/runs/ and results/runs-v2/ came from it, and it is the only provider any published claim rests on. It injects harness context, so its cost is reported as an upper bound beside a computed bare-API lower bound. |
+| `codex_cli` | a local Codex plan session in CODEX_HOME, NOT an OpenAI API key | **yes** | A SECOND VENDOR, reachable without a credential, the same way claude_cli is. It discloses real token usage and NOTHING ELSE: no served model identity for any alias, no server-reported latency, no cost, no stop reason. Those are recorded as not_exposed rather than guessed, so `latencyMs` from a codex_cli run is a constant zero - a metric this adapter cannot produce, not a provider that answers instantly. It does NOT close the BYOK gap: the two HTTP adapters below remain unrun. |
+| `anthropic_api` | ANTHROPIC_API_KEY | **no** | Shipped and UNRUN. There is no key in the environment that produced this repository. Its cost would be the deployed cost, with no harness overhead to subtract. |
+| `openai_compatible` | OPENAI_API_KEY plus OPENAI_BASE_URL | **no** | Shipped and UNRUN. Speaks /v1/chat/completions, so it also reaches vLLM, Together, OpenRouter and Ollama. Proves the seam is not Anthropic-shaped; proves nothing about behavior against those endpoints. |
+| `replay` | none | **yes** | Replays recorded outputs, keyed by request hash. What the tests and both calibration studies use, so neither ever spends money. |
+| `noop` | none | **yes** | Returns SKIPPED with a reason for every call. What CI uses when no credential exists, so an absent measurement is visible rather than missing. |
+<!-- /GENERATED -->
 
 **There is no API key in the environment that produced this repository.** The two HTTP adapters are
 written, typechecked and exercised against a fake transport in
@@ -73,6 +76,73 @@ The dated snapshot appears in the `modelUsage` KEY, not in `canonicalModel`. An 
 **Alias granularity is provider- and model-dependent.** A tool that assumes a dated id exists would
 report "no identity change" for a provider that never had one to show, so undisclosed fields are
 named in the report rather than treated as unchanged.
+
+## The `codex` CLI adapter, and a provider that discloses nothing
+
+Added because "one provider, one model family, one machine" was limitation #3 and the two BYOK HTTP
+adapters that would close it need a key this environment does not have. `codex exec` does not: it
+runs on the local Codex plan session in `CODEX_HOME`, the same way `claude -p` runs on a Claude plan
+session. The invocation is the one the sibling `agent-context-containment` already proved, plus
+`--json`.
+
+**THIS DOES NOT CLOSE THE BYOK GAP.** `anthropic_api` and `openai_compatible` speak to deployed HTTP
+endpoints and are still shipped and unrun. A plan-backed CLI is a third thing.
+
+### What it discloses, measured on a live 16-call run
+
+| field | `claude_cli` | `codex_cli` |
+|---|---|---|
+| served model identity | `claude-haiku-4-5-20251001` for the `haiku` alias | **nothing, for any alias** |
+| canonical model | yes | no |
+| context window / max output | yes | no |
+| service tier / cost basis | yes | no |
+| server latency (`apiMs`) | `duration_api_ms` | **not reported** |
+| client latency (`clientMs`) | `duration_ms` | **not reported** |
+| wall time | measured here | measured here |
+| cost | `total_cost_usd` | **not priced by the plan** |
+| input / output / cache tokens | yes | **yes** |
+
+**The identity row is the interesting one and it runs the wedge backwards.** The README argues that
+alias-resolution granularity is provider-dependent and that a tool assuming a dated id exists will
+report "no identity change" for a provider that never had one to show. `codex_cli` is that provider
+in its strongest form: it names no model at all. So `modelServed` and `canonicalModel` are recorded
+EMPTY, `undisclosedFields` lists all six absent fields, and the drift gate reports
+`identity/fingerprint NOT RUN` rather than PASS. Writing the requested alias into `modelServed`
+would have manufactured a stable identity out of an absent one, and an identity check that can never
+fire is worse than one that says it cannot see.
+
+**`latencyMs` from a codex_cli run is a constant zero.** `metrics.ts` reads `apiMs`, which this
+provider does not have, and copying the wall clock into a field documented as server-reported is the
+defect this project already found in its own HTTP adapters. Zero is the honest value and this
+sentence is the caveat; `latencyMs` is non-gating so it cannot fail a build.
+
+### What a call costs
+
+Measured over 8 canary cases at 1 replicate, then 16 at 2:
+
+| quantity | value |
+|---|---|
+| input tokens per call | about 14,500, almost all harness context |
+| output tokens per call | 5 to 6 |
+| wall time per call | 3.0 to 6.4 seconds |
+| errors | 0 of 16 at concurrency 2 |
+| quality on the canary split | 7 of 8 |
+
+The input-token figure is the same shape as the `claude` adapter's injected context, and it is why a
+canary paid for on every tick forever is a budget decision rather than a taste one.
+
+### The two defaults that are not interchangeable
+
+`--model` defaulted to `sonnet` for every provider. Pointed at Codex that produced 16 failed calls
+reading *The 'sonnet' model is not supported when using Codex with a ChatGPT account* - a whole
+collection lost to a default belonging to a different vendor. The default is now per provider, and
+for `codex_cli` it is the empty string: **on a ChatGPT plan, naming a model is rejected outright**,
+so the only invocation that works is the one that names none. It is recorded as `default`.
+
+```sh
+sentinel run --provider codex_cli --split canary --replicates 2 --concurrency 2 \
+  --label codex-a --out results/live-codex --yes
+```
 
 ## The BYOK adapters: env vars, failure modes, and what a live run would cost
 

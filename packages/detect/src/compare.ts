@@ -242,7 +242,7 @@ export function compare(
     verdict,
     reason,
     couldNotLook,
-    identityComparable: baseline.fingerprint !== null && candidate.fingerprint !== null,
+    identityComparable: identityObserved(baseline) && identityObserved(candidate),
     casesNotInEitherArm: [],
     alpha,
     findings: [],
@@ -440,7 +440,7 @@ export function compare(
     verdict,
     reason,
     couldNotLook: null,
-    identityComparable: baseline.fingerprint !== null && candidate.fingerprint !== null,
+    identityComparable: identityObserved(baseline) && identityObserved(candidate),
     casesNotInEitherArm,
     alpha,
     findings,
@@ -511,6 +511,32 @@ function metadataChangesOf(a: RunSnapshot, b: RunSnapshot): readonly MetadataCha
     ];
   }
   return diffMetadata(before, after);
+}
+
+/**
+ * Whether the two arms disclosed any PROVIDER-SOURCED identity to compare.
+ *
+ * A null fingerprint is not the only way to have nothing to check. `codex exec` returns a
+ * fingerprint object in which every field the provider would fill is empty: no served model, no
+ * canonical model, no context window, no max output, no service tier, no cost basis. The diff then
+ * finds no change - because there was nothing to change - and the report said "The provider
+ * fingerprint was unchanged", which is reassurance about a measurement that never happened.
+ *
+ * `requestedModel` and `provider` are deliberately NOT counted. They are facts about the
+ * invocation, not about what answered it, and a check that passes on them is checking that we asked
+ * the same question twice.
+ */
+function identityObserved(snapshot: RunSnapshot): boolean {
+  const f = snapshot.fingerprint;
+  if (f === null) return false;
+  return (
+    f.resolvedModel !== "" ||
+    f.canonicalModel !== "" ||
+    f.contextWindow !== null ||
+    f.maxOutputTokens !== null ||
+    f.serviceTier !== "" ||
+    f.costBasis !== ""
+  );
 }
 
 function identityChangesOf(a: RunSnapshot, b: RunSnapshot): readonly FingerprintChange[] {

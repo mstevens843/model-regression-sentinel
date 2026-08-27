@@ -28,6 +28,8 @@ import {
 } from "@model-regression-sentinel/report";
 import {
   ClaudeCliProvider,
+  CodexCliProvider,
+  type Provider,
   type RunSnapshot,
   corpusDigestOf,
   runCorpus,
@@ -70,6 +72,54 @@ const out = (text: string): void => {
 };
 
 const corpusRoot = (args: Args): string => flag(args, "corpus", "corpus");
+
+/**
+ * Which provider a collection or a watch tick should use.
+ *
+ * `claude_cli` stays the default, so every existing invocation and every recorded run keeps meaning
+ * what it meant. `codex_cli` is the second plan-backed CLI: it needs no API key either, and it is
+ * NOT one of the BYOK HTTP adapters, which remain unrun. See PROVIDER_REGISTRY for what each one
+ * does and does not disclose - `codex_cli` reports no served model identity at all, which is a fact
+ * about that provider and is recorded rather than guessed.
+ */
+const PROVIDER_IDS = ["claude_cli", "codex_cli"] as const;
+
+/**
+ * Validated on its own, so a bad value is refused at PLAN time.
+ *
+ * Constructing the provider only after the `--yes` gate would mean `--provider bogus` printed a
+ * collection plan and exited 0 - the same shape as the `--concurrency` defect this CLI already
+ * fixed. A flag checked only on the path that spends money is a flag whose rejection arrives after
+ * the decision to spend.
+ */
+function providerIdFrom(args: Args): (typeof PROVIDER_IDS)[number] {
+  const id = flag(args, "provider", "claude_cli");
+  const found = PROVIDER_IDS.find((p) => p === id);
+  if (found === undefined) {
+    throw new UsageError(`--provider must be one of: ${PROVIDER_IDS.join(", ")}, not "${id}"`);
+  }
+  return found;
+}
+
+function providerFor(args: Args, model: string): Provider {
+  return providerIdFrom(args) === "codex_cli"
+    ? new CodexCliProvider(model)
+    : new ClaudeCliProvider(model);
+}
+
+/**
+ * The default alias, which depends on the provider and cannot not.
+ *
+ * `--model` defaulted to `sonnet` for everything, and `sonnet` is a Claude alias. Pointed at Codex
+ * it produced 16 failed calls reading "The 'sonnet' model is not supported when using Codex with a
+ * ChatGPT account" - a whole collection lost to a default that belonged to a different vendor.
+ *
+ * Codex defaults to the empty string, which this adapter records as `default` and turns into "pass
+ * no -m at all". That is deliberate rather than lazy: on a ChatGPT plan, naming a model is REJECTED,
+ * so the only invocation that works is the one that names none.
+ */
+const defaultModelFor = (args: Args): string =>
+  providerIdFrom(args) === "codex_cli" ? "" : "sonnet";
 
 // `both` MEANT TWO DIFFERENT CORPORA IN TWO ENTRY POINTS, and that is what `v1` exists to end.
 // Here it resolved to all three splits (34 cases); in `scripts/run-study.mjs` it resolved to canary
@@ -161,12 +211,13 @@ export function cmdCorpus(args: Args): number {
 /** `sentinel run` - collect one arm. Spends money, so it asks. */
 export async function cmdRun(args: Args): Promise<number> {
   const { cases, split } = casesFor(args);
-  const model = flag(args, "model", "sonnet");
+  const model = flag(args, "model", defaultModelFor(args));
   const replicates = numberFlag(args, "replicates", 10, { min: 1, max: 1000, integer: true });
   // Read BEFORE the --yes gate even though it is only used after it. A flag validated only on the
   // path that spends money is a flag whose rejection arrives after the decision to spend: the plan
   // a person reads has to be the plan that runs, including its refusals.
   const concurrency = numberFlag(args, "concurrency", 6, { min: 1, max: 64, integer: true });
+  const providerId = providerIdFrom(args);
   const label = flag(args, "label", "run");
   const dir = flag(args, "out", join("results", "runs"));
 
@@ -174,14 +225,14 @@ export async function cmdRun(args: Args): Promise<number> {
     out(
       `would collect ${cases.length} cases x ${replicates} replicates = ${cases.length * replicates} calls`,
     );
-    out(`against the alias "${model}".`);
+    out(`against the alias "${model}", through ${providerId}.`);
     out("");
     out("This spends real money. Re-run with --yes to do it.");
     out("For a cost estimate from a measured pilot rate, use `node scripts/run-study.mjs`.");
     return EXIT_OK;
   }
 
-  const provider = new ClaudeCliProvider(model);
+  const provider = providerFor(args, model);
   const gate = provider.available();
   if (!gate.ok) {
     // COULD NOT LOOK, not misuse. The invocation was fine and the credential was absent, which is
@@ -355,7 +406,7 @@ export async function cmdWatch(args: Args): Promise<number> {
   } else {
     // Collect the round now. A tick that cannot reach the provider must say so rather than
     // reporting quiet, which is what `could_not_look` is for.
-    const provider = new ClaudeCliProvider(file.requestedModel);
+    const provider = providerFor(args, file.requestedModel);
     snapshot = await runCorpus(provider, cases, split, {
       replicates: numberFlag(args, "replicates", 3, { min: 1, max: 1000, integer: true }),
       concurrency: numberFlag(args, "concurrency", 4, { min: 1, max: 64, integer: true }),

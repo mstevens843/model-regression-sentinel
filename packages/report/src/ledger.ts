@@ -249,7 +249,7 @@ function identityRow(result: CompareResult): GateRow {
       name: "fingerprint",
       status: "NOT RUN",
       detail:
-        "at least one arm never observed a provider identity, so no fingerprint field could be compared. This is not evidence that the identity held.",
+        "at least one arm disclosed no provider identity at all, so no fingerprint field could be compared. Either no call succeeded, or this provider does not report what served them. Not evidence that the identity held.",
     };
   }
   if (result.identityChanges.length === 0) {

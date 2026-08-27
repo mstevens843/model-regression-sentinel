@@ -31,6 +31,7 @@
     "study:collect": "node scripts/run-study.mjs",
     "test": "turbo run test",
     "test:count": "node scripts/test-counts.mjs",
+    "test:count:check": "node scripts/test-counts.mjs --check",
     "typecheck": "turbo run typecheck",
     "verify:corpus": "bash scripts/verify-corpus.sh",
     "verify:freeze": "bash scripts/verify-freeze.sh",

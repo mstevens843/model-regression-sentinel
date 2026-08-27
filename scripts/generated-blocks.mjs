@@ -243,6 +243,38 @@ function exitCodes() {
   ].join("\n");
 }
 
+/**
+ * The adapter table, from PROVIDER_REGISTRY rather than from anyone's memory of it.
+ *
+ * It was hand-maintained, and it went stale the moment a sixth adapter was added: the header said
+ * "Five adapters", the table listed five, and `codex_cli` was documented three sections further
+ * down without ever appearing in the summary a reader checks first. The registry is the definition;
+ * this reads it. Same regex approach as `remainingRisks`, so this script still imports nothing from
+ * `dist/` and still runs on a fresh clone with no build.
+ */
+function providerTable() {
+  const registry = read("packages/run/src/providers/index.ts");
+  const entries = [
+    ...registry.matchAll(
+      /id: "([a-z_]+)",\s*\n\s*credential: "([^"]+)",\s*\n\s*everRun: (true|false),\s*\n\s*note:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g,
+    ),
+  ];
+  if (entries.length === 0) return "Could not read PROVIDER_REGISTRY.";
+  const rows = entries.map((m) => {
+    const ran = m[3] === "true" ? "**yes**" : "**no**";
+    const note = m[4].replace(/\\"/g, '"').replace(/\s+/g, " ").trim();
+    return `| \`${m[1]}\` | ${m[2]} | ${ran} | ${note} |`;
+  });
+  const ran = entries.filter((m) => m[3] === "true").length;
+  return [
+    `**${entries.length} adapters behind one seam, ${ran} of them ever run here.** The column that matters is the third one.`,
+    "",
+    "| adapter | credential | ever run here | notes |",
+    "|---|---|---|---|",
+    ...rows,
+  ].join("\n");
+}
+
 const BLOCKS = {
   "freeze-status": freezeStatus,
   "calibration-summary": calibrationSummary,
@@ -252,6 +284,7 @@ const BLOCKS = {
   "detector-controls": detectorControls,
   "defect-counts": defectCounts,
   "exit-codes": exitCodes,
+  "provider-table": providerTable,
 };
 
 // ---- the rewriter ---------------------------------------------------------------------------------
@@ -261,6 +294,7 @@ const TARGETS = [
   "RESULTS.md",
   "docs/DETECTOR_CARD.md",
   "docs/WATCHER.md",
+  "docs/PROVIDERS.md",
   "docs/FREEZE.md",
 ];
 

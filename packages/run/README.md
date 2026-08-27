@@ -25,15 +25,20 @@ The `haiku` alias exposes a dated snapshot; `sonnet` does not. **Alias-resolutio
 provider-dependent**, so identity is hashed as a fingerprint over everything the provider does
 disclose, and undisclosed fields are **named** rather than treated as agreement.
 
-## Five adapters, and which have been run
+## Six adapters, and which have been run
 
 | adapter | credential | ever run |
 |---|---|---|
-| `claude_cli` | an authenticated local `claude` CLI | **yes** - every measured number came from it |
+| `claude_cli` | an authenticated local `claude` CLI | **yes** - every published number came from it |
 | `anthropic_api` | `ANTHROPIC_API_KEY` | **no** - shipped and unrun |
 | `openai_compatible` | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | **no** - shipped and unrun |
+| `codex_cli` | a local Codex plan session, **not** an OpenAI API key | **yes** - a second vendor, and it discloses no model identity for any alias |
 | `replay` | none | yes - what the tests and both calibration studies use |
 | `noop` | none | yes - returns SKIPPED with a reason, so an absent measurement is visible |
+
+**`codex_cli` does NOT close that gap.** It is a second plan-backed CLI, reachable without a
+credential the same way `claude_cli` is. The two HTTP adapters speak to deployed endpoints and are a
+different thing.
 
 **The two HTTP adapters have never made a real call.** They are typechecked and exercised against a
 fake transport, and no number in this repository came from either.
@@ -49,7 +54,7 @@ that never captured one, would otherwise show a clean diff on the one field that
 | package | what it is |
 |---|---|
 | `spec` | the frozen case format, the graders, canonical JSON, the freeze discipline. Zero dependencies |
-| `run` | provider-agnostic execution: five adapters, resolved identity, three latency figures, two cost bounds |
+| `run` | provider-agnostic execution: six adapters behind one seam, resolved identity, three latency figures, two cost bounds |
 | `baseline` | snapshots as reference points, staleness, and the A/A split the null calibration needs |
 | `detect` | the detector: two nulls, a computed MDE, and the e-process for continuous mode |
 | `report` | text, markdown and JSON reports, and the gate ledger the exit code is read from |

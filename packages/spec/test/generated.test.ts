@@ -209,3 +209,54 @@ describe("the freeze wording cannot drift away from the freeze record", () => {
     expect(block).toContain("exits 1 by design");
   });
 });
+
+// THE STALE-ARTIFACT CLASS THAT `blocks:check` CANNOT SEE.
+//
+// `generated-blocks.mjs --check` compares each BLOCK against the ARTIFACT it reads. That is the
+// right job and it is not the whole job: it has no way to know the artifact itself went stale.
+// Measured on this repository - `results/tests.json` said 579 while the green suite contained 599,
+// the block matched the artifact exactly, and every gate passed. The published number was wrong and
+// gated green.
+//
+// `test-counts.mjs --check` closes it by ENUMERATING the suite with `vitest list`, which collects
+// without executing, so it counts the tests generated in loops over `ALL_SPLITS` and over the corpus
+// too. Verified exact against a full run, package by package.
+//
+// THE BEHAVIOURAL NEGATIVE CONTROL LIVES IN `audit:release`, NOT HERE, and that placement is
+// deliberate. Proving the gate FAILS requires corrupting `results/tests.json`, and vitest runs test
+// files in parallel: a first attempt at these assertions mutated that shared artifact while another
+// test file was reading it, and produced `Unexpected end of JSON input` in an unrelated suite. A
+// test that damages shared state to prove a point is a test that makes other tests flaky.
+// `audit-release.sh` step 3e does the same corruption serially, restores from a scratch copy before
+// the verdict is read, and then re-checks that the restore worked. What is asserted here is that
+// the gate exists, passes, and is wired somewhere it will actually run.
+describe("the recorded test count is gated, not merely documented", () => {
+  const audit = readFileSync(join(REPO, "scripts/audit-release.sh"), "utf8");
+
+  it("is wired into audit:release, so it cannot be a check nobody runs", () => {
+    // The failure this repository already had once: `generated-blocks.mjs --check` existed for a
+    // whole release, claimed in its own header to be gated, and was gated nowhere.
+    expect(audit).toContain("test-counts.mjs --check");
+  });
+
+  it("carries a negative control there, like the other two drift checks", () => {
+    // A check that only ever passes proves nothing. This asserts the control exists; whether it
+    // FIRES is proved by running `pnpm audit:release`, where it is step 3e.
+    expect(audit).toContain("NEGATIVE CONTROL: the test-count check must reject a stale count");
+    expect(audit).toContain("a corrupted test count passed the check");
+  });
+
+  it("records a count that is all-green, so the number means what it says", () => {
+    // Read-only. `test-counts.mjs` refuses to write a count from a run that was not green, and
+    // `--check` re-asserts it, so a skipped test cannot be published as a passing one.
+    const doc = JSON.parse(readFileSync(join(REPO, "results/tests.json"), "utf8")) as {
+      packages: { package: string; tests: number; passed: number }[];
+      totalTests: number;
+    };
+    expect(doc.packages.length).toBeGreaterThan(0);
+    for (const row of doc.packages) {
+      expect(row.passed, `${row.package} recorded a non-green count`).toBe(row.tests);
+    }
+    expect(doc.totalTests).toBe(doc.packages.reduce((n, r) => n + r.tests, 0));
+  });
+});

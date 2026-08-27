@@ -198,7 +198,7 @@ function ceilingOf(result: CompareResult): Ceiling {
 function identityLines(result: CompareResult): readonly string[] {
   if (!result.identityComparable) {
     return wrap(
-      "NOT COMPARABLE: at least one arm never observed a provider identity, because no call in it succeeded. No fingerprint field could be compared, and this is not evidence that the identity held.",
+      "NOT COMPARABLE: at least one arm disclosed no provider identity at all. Either no call in it succeeded, or this provider does not report what served them - codex_cli names no model for any alias. No fingerprint field could be compared, and this is not evidence that the identity held.",
       RULE_WIDTH,
       "  ",
     );

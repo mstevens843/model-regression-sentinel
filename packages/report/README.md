@@ -44,7 +44,7 @@ floor and the minimum detectable effect are each rendered in whichever the metri
 | package | what it is |
 |---|---|
 | `spec` | the frozen case format, the graders, canonical JSON, the freeze discipline. Zero dependencies |
-| `run` | provider-agnostic execution: five adapters, resolved identity, three latency figures, two cost bounds |
+| `run` | provider-agnostic execution: six adapters behind one seam, resolved identity, three latency figures, two cost bounds |
 | `baseline` | snapshots as reference points, staleness, and the A/A split the null calibration needs |
 | `detect` | the detector: two nulls, a computed MDE, and the e-process for continuous mode |
 | `report` | text, markdown and JSON reports, and the gate ledger the exit code is read from |

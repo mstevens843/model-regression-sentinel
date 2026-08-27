@@ -6,6 +6,8 @@
 
 export { ClaudeCliProvider } from "./claudeCli.js";
 export type { ClaudeCliOptions, ExecResult } from "./claudeCli.js";
+export { CodexCliProvider, lastError, lastUsage } from "./codexCli.js";
+export type { CodexCliOptions } from "./codexCli.js";
 export { AnthropicApiProvider, OpenAiCompatibleProvider } from "./httpApi.js";
 export type { Fetcher } from "./httpApi.js";
 export { ReplayProvider, replayTable, requestKey } from "./replay.js";
@@ -25,7 +27,13 @@ export const PROVIDER_REGISTRY: readonly ProviderEntry[] = [
     id: "claude_cli",
     credential: "an authenticated local `claude` CLI",
     everRun: true,
-    note: "The only provider actually run. Every measured number in this repository came from it. It injects harness context, so its cost is reported as an upper bound beside a computed bare-API lower bound.",
+    note: "Every number in results/runs/ and results/runs-v2/ came from it, and it is the only provider any published claim rests on. It injects harness context, so its cost is reported as an upper bound beside a computed bare-API lower bound.",
+  },
+  {
+    id: "codex_cli",
+    credential: "a local Codex plan session in CODEX_HOME, NOT an OpenAI API key",
+    everRun: true,
+    note: "A SECOND VENDOR, reachable without a credential, the same way claude_cli is. It discloses real token usage and NOTHING ELSE: no served model identity for any alias, no server-reported latency, no cost, no stop reason. Those are recorded as not_exposed rather than guessed, so `latencyMs` from a codex_cli run is a constant zero - a metric this adapter cannot produce, not a provider that answers instantly. It does NOT close the BYOK gap: the two HTTP adapters below remain unrun.",
   },
   {
     id: "anthropic_api",

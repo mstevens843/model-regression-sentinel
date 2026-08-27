@@ -1,0 +1,508 @@
+{
+  "capturedAt": "2026-08-27T17:49:44.021Z",
+  "caseIds": [
+    "cnt-c-001",
+    "cnt-c-002",
+    "cnt-c-003",
+    "obx-c-001",
+    "obx-c-002",
+    "obx-c-003",
+    "obx-c-004",
+    "obx-c-005"
+  ],
+  "concurrency": 2,
+  "corpusDigest": "150e3aeabba8c4ca3f7ef340b30954255468d5ffa7ff3e1a8903bc3fcdb94e7d",
+  "cost": {
+    "bareApiUsdPerCall": 0,
+    "harnessUsdPerCall": 0,
+    "meanCacheCreateTokens": 0,
+    "meanCacheReadTokens": 10496,
+    "meanInputTokens": 14549.125,
+    "meanOutputTokens": 5.5625,
+    "model": "",
+    "n": 16,
+    "rateCardDate": "2026-06-24",
+    "rateUnknown": true
+  },
+  "errorCount": 0,
+  "fingerprint": {
+    "canonicalModel": "",
+    "contextWindow": null,
+    "costBasis": "",
+    "maxOutputTokens": null,
+    "provider": "codex_cli:default",
+    "requestedModel": "default",
+    "resolvedModel": "",
+    "serviceTier": "",
+    "sha256": "dcd6735cc2fcafc13683a98a32fb673b67cdc3cf5c5f56ade2743b74dd9c410c"
+  },
+  "label": "codex-a",
+  "metadata": {
+    "adapter": {
+      "kind": "value",
+      "value": "codex_cli:default"
+    },
+    "adapterVersion": {
+      "kind": "value",
+      "value": "0.2.0"
+    },
+    "canonicalModel": {
+      "kind": "not_exposed"
+    },
+    "contextWindow": {
+      "kind": "not_exposed"
+    },
+    "costBasis": {
+      "kind": "not_exposed"
+    },
+    "endpoint": {
+      "kind": "value",
+      "value": "cli"
+    },
+    "harnessVersion": {
+      "kind": "unknown"
+    },
+    "maxOutputTokens": {
+      "kind": "not_exposed"
+    },
+    "observedAt": "2026-08-27T17:49:44.022Z",
+    "requestedModel": {
+      "kind": "value",
+      "value": "default"
+    },
+    "resolvedModel": {
+      "kind": "not_exposed"
+    },
+    "schemaVersion": 1,
+    "serviceTier": {
+      "kind": "not_exposed"
+    },
+    "sha256": "7b4ed8af014afed5d12e3df824a80c43c8b864de7bd62b2d830c76c70577dea9",
+    "tokenSource": "cli_usage"
+  },
+  "provider": "codex_cli:default",
+  "records": [
+    {
+      "caseId": "cnt-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "d91cb2791e619d9d4e16a83aba09492a9a7bd3d67fcbab97a28bb43cbf147376",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14657,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 4182.792042
+      }
+    },
+    {
+      "caseId": "cnt-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "d91cb2791e619d9d4e16a83aba09492a9a7bd3d67fcbab97a28bb43cbf147376",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14657,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 3741.689166
+      }
+    },
+    {
+      "caseId": "cnt-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "f9db1a6d377cf9525027b23e523b08409a308a5eb68bae109dc9b3b71d0adfcf",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14572,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "ALLOW",
+        "wallMs": 3316.3365
+      }
+    },
+    {
+      "caseId": "cnt-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "f9db1a6d377cf9525027b23e523b08409a308a5eb68bae109dc9b3b71d0adfcf",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14568,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 3717.922542
+      }
+    },
+    {
+      "caseId": "cnt-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "b97d17f2a879a8cf683462bd09e3aac3e0aa6e463ad311db42733768b49f5636",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14533,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 4230.621333
+      }
+    },
+    {
+      "caseId": "cnt-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "b97d17f2a879a8cf683462bd09e3aac3e0aa6e463ad311db42733768b49f5636",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14531,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 3058.267208
+      }
+    },
+    {
+      "caseId": "obx-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "eb974a162cc0be942a1d9aa78ce729b06d4e64f2a256bbad53a2a6dd876aba0f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14532,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "HOLD",
+        "wallMs": 3043.406958
+      }
+    },
+    {
+      "caseId": "obx-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "eb974a162cc0be942a1d9aa78ce729b06d4e64f2a256bbad53a2a6dd876aba0f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14532,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "HOLD",
+        "wallMs": 4402.63825
+      }
+    },
+    {
+      "caseId": "obx-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "04f20ba1d463f40b122863b5ceafd40a5bc71778362f1e1c493a4337f1494602",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14533,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "RECORD",
+        "wallMs": 3649.473375
+      }
+    },
+    {
+      "caseId": "obx-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "04f20ba1d463f40b122863b5ceafd40a5bc71778362f1e1c493a4337f1494602",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 14080,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14537,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "RECORD",
+        "wallMs": 4101.732416
+      }
+    },
+    {
+      "caseId": "obx-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "7ad15a838923a7daa20b7f75419987bc303913052bbeb44e21223c7b10e08dff",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14530,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 3304.327708
+      }
+    },
+    {
+      "caseId": "obx-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "7ad15a838923a7daa20b7f75419987bc303913052bbeb44e21223c7b10e08dff",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14536,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 3714.999333
+      }
+    },
+    {
+      "caseId": "obx-c-004",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "027afb604b332f3862349a1e8a11a22b1557e2593028127fd8683902356a853f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 14080,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14519,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "UNKNOWN",
+        "wallMs": 3510.649791
+      }
+    },
+    {
+      "caseId": "obx-c-004",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "027afb604b332f3862349a1e8a11a22b1557e2593028127fd8683902356a853f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14519,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "UNKNOWN",
+        "wallMs": 3128.699958
+      }
+    },
+    {
+      "caseId": "obx-c-005",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "494ea09453edbc1481d79bc364f06dfbab11037533f9543debc9f6f8880ec259",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14514,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 3044.393083
+      }
+    },
+    {
+      "caseId": "obx-c-005",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 1,
+      "requestSha256": "494ea09453edbc1481d79bc364f06dfbab11037533f9543debc9f6f8880ec259",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14516,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 3248.9885
+      }
+    }
+  ],
+  "replicates": 2,
+  "requestedModel": "default",
+  "schemaVersion": 1,
+  "splits": [
+    "canary"
+  ]
+}

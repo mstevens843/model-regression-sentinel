@@ -23,12 +23,23 @@ Cases where that is true carry a `detectionLimit` naming what they cannot see, a
 their own row rather than counted in the headline. A corpus with none of those would be a rigged
 corpus.
 
-## 3. One provider, one model family, one machine
+## 3. Every published claim rests on one provider
 
-Everything measured here came through one CLI, on one laptop, against one vendor. Nothing establishes
-that the noise floors, the error rates or the alias-resolution behaviour resemble any other
-provider's. The two BYOK HTTP adapters exist so that someone with a key can find out; they have never
-been run.
+Everything this repository publishes came through one CLI, on one laptop, against one vendor:
+`results/runs/`, `results/runs-v2/`, both calibration studies, the mutant discrimination table and
+every generated block. Nothing establishes that the noise floors, the error rates or the
+alias-resolution behaviour resemble any other provider's.
+
+**A second vendor has been reached, and it changes less than it sounds like.** The `codex_cli`
+adapter runs on a local Codex plan session and has made 40 live calls over the 8-case canary split.
+That is **supplementary evidence**: it gates nothing, it appears in no calibration study, and its
+artifacts are in `results/live-codex/` rather than beside the paid collections. What it demonstrates
+is that the provider seam is not shaped around one vendor. What it does **not** demonstrate is
+anything about noise floors elsewhere, and it cannot corroborate the alias-resolution wedge at all,
+because Codex discloses no served model identity for any alias.
+
+**The two BYOK HTTP adapters remain unrun.** They speak to deployed endpoints and need a key this
+environment does not have. A plan-backed CLI is a third thing and does not close that gap.
 
 ## 4. `NO_DRIFT` is unreachable on the v0.1 corpus, and was observed on the v0.2 one
 

@@ -1,0 +1,299 @@
+{
+  "capturedAt": "2026-08-27T17:47:24.851Z",
+  "caseIds": [
+    "cnt-c-001",
+    "cnt-c-002",
+    "cnt-c-003",
+    "obx-c-001",
+    "obx-c-002",
+    "obx-c-003",
+    "obx-c-004",
+    "obx-c-005"
+  ],
+  "concurrency": 1,
+  "corpusDigest": "150e3aeabba8c4ca3f7ef340b30954255468d5ffa7ff3e1a8903bc3fcdb94e7d",
+  "cost": {
+    "bareApiUsdPerCall": 0,
+    "harnessUsdPerCall": 0,
+    "meanCacheCreateTokens": 0,
+    "meanCacheReadTokens": 9984,
+    "meanInputTokens": 14572.5,
+    "meanOutputTokens": 5.5,
+    "model": "",
+    "n": 8,
+    "rateCardDate": "2026-06-24",
+    "rateUnknown": true
+  },
+  "errorCount": 0,
+  "fingerprint": {
+    "canonicalModel": "",
+    "contextWindow": null,
+    "costBasis": "",
+    "maxOutputTokens": null,
+    "provider": "codex_cli:",
+    "requestedModel": "",
+    "resolvedModel": "",
+    "serviceTier": "",
+    "sha256": "b18a1c50aa596549ae5a8acad4787a286ca4471738219a8e9378185d898fa650"
+  },
+  "label": "codex-live-smoke-default",
+  "metadata": {
+    "adapter": {
+      "kind": "value",
+      "value": "codex_cli:"
+    },
+    "adapterVersion": {
+      "kind": "value",
+      "value": "0.2.0"
+    },
+    "canonicalModel": {
+      "kind": "not_exposed"
+    },
+    "contextWindow": {
+      "kind": "not_exposed"
+    },
+    "costBasis": {
+      "kind": "not_exposed"
+    },
+    "endpoint": {
+      "kind": "value",
+      "value": "cli"
+    },
+    "harnessVersion": {
+      "kind": "unknown"
+    },
+    "maxOutputTokens": {
+      "kind": "not_exposed"
+    },
+    "observedAt": "2026-08-27T17:47:24.852Z",
+    "requestedModel": {
+      "kind": "not_exposed"
+    },
+    "resolvedModel": {
+      "kind": "not_exposed"
+    },
+    "schemaVersion": 1,
+    "serviceTier": {
+      "kind": "not_exposed"
+    },
+    "sha256": "11dcc90931bc8cd9ed2f2b708adf3775c8fdae4969398f96c812579c08b8e45b",
+    "tokenSource": "cli_usage"
+  },
+  "provider": "codex_cli:",
+  "records": [
+    {
+      "caseId": "cnt-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "d91cb2791e619d9d4e16a83aba09492a9a7bd3d67fcbab97a28bb43cbf147376",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14659,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 3282.02875
+      }
+    },
+    {
+      "caseId": "cnt-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "f9db1a6d377cf9525027b23e523b08409a308a5eb68bae109dc9b3b71d0adfcf",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14667,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "ALLOW",
+        "wallMs": 3864.504959
+      }
+    },
+    {
+      "caseId": "cnt-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "b97d17f2a879a8cf683462bd09e3aac3e0aa6e463ad311db42733768b49f5636",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14529,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "DENY",
+        "wallMs": 3718.048208
+      }
+    },
+    {
+      "caseId": "obx-c-001",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "eb974a162cc0be942a1d9aa78ce729b06d4e64f2a256bbad53a2a6dd876aba0f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14534,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "HOLD",
+        "wallMs": 3283.321583
+      }
+    },
+    {
+      "caseId": "obx-c-002",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "04f20ba1d463f40b122863b5ceafd40a5bc71778362f1e1c493a4337f1494602",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14628,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 6,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "RECORD",
+        "wallMs": 3683.59075
+      }
+    },
+    {
+      "caseId": "obx-c-003",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "7ad15a838923a7daa20b7f75419987bc303913052bbeb44e21223c7b10e08dff",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14530,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 3965.442708
+      }
+    },
+    {
+      "caseId": "obx-c-004",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "027afb604b332f3862349a1e8a11a22b1557e2593028127fd8683902356a853f",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14519,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "UNKNOWN",
+        "wallMs": 3013.875333
+      }
+    },
+    {
+      "caseId": "obx-c-005",
+      "promptId": "terse-v1",
+      "promptSha256": "f66ef3ecd1de75b1596cd48d0987ae5d28ff5e09246e378197fa13c2723b61ce",
+      "replicate": 0,
+      "requestSha256": "494ea09453edbc1481d79bc364f06dfbab11037533f9543debc9f6f8880ec259",
+      "response": {
+        "apiMs": 0,
+        "cacheCreateTokens": 0,
+        "cacheReadTokens": 9984,
+        "canonicalModel": "",
+        "clientMs": 0,
+        "contextWindow": null,
+        "costBasis": "",
+        "error": "",
+        "harnessCostUsd": 0,
+        "inputTokens": 14514,
+        "maxOutputTokens": null,
+        "modelServed": "",
+        "outputTokens": 5,
+        "serviceTier": "",
+        "stopReason": "",
+        "text": "NO",
+        "wallMs": 6410.897333
+      }
+    }
+  ],
+  "replicates": 1,
+  "requestedModel": "",
+  "schemaVersion": 1,
+  "splits": [
+    "canary"
+  ]
+}
