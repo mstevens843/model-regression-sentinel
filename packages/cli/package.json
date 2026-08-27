@@ -22,7 +22,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "sentinel": "./dist/cli.js"
+    "sentinel": "./bin/sentinel.js"
   },
   "exports": {
     ".": {
@@ -37,7 +37,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["LICENSE", "README.md", "dist"],
+  "files": ["LICENSE", "README.md", "bin", "dist"],
   "engines": {
     "node": ">=20 <25"
   },

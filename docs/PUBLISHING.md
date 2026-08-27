@@ -230,8 +230,8 @@ In this order, in one sitting, on one clean checkout. "It passed yesterday" is n
    ```
 
    Measured on 2026-08-26: `added 7 packages`, and `sentinel --help` exits **0** from a directory
-   that has never seen this workspace. The same run also confirms the `bin` link is created and the
-   shipped `dist/cli.js` carries its shebang.
+   that has never seen this workspace. The same run also confirms the `bin` link is created, the
+   shipped `bin/sentinel.js` shim carries its shebang, and the shim delegates to `dist/cli.js`.
 
 9. [ ] **Version with changesets**, then rebuild and re-verify against the numbers it just wrote.
 
